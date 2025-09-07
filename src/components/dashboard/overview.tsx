@@ -30,7 +30,11 @@ import {
   Users,
   MessageSquareWarning,
 } from "lucide-react";
-import { ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 
 const chartData = [
   { month: "January", incidents: 186 },
@@ -40,6 +44,13 @@ const chartData = [
   { month: "May", incidents: 209 },
   { month: "June", incidents: 214 },
 ];
+
+const chartConfig = {
+  incidents: {
+    label: "Incidents",
+    color: "hsl(var(--primary))",
+  },
+};
 
 const recentActivities = [
   {
@@ -129,8 +140,8 @@ export default function Overview() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={chartData}>
+            <ChartContainer config={chartConfig} className="h-[350px] w-full">
+              <BarChart accessibilityLayer data={chartData}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis
                   dataKey="month"
@@ -152,11 +163,11 @@ export default function Overview() {
                 />
                 <Bar
                   dataKey="incidents"
-                  fill="hsl(var(--primary))"
+                  fill="var(--color-incidents)"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </CardContent>
         </Card>
         <Card className="lg:col-span-3">
