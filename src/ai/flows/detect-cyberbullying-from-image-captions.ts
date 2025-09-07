@@ -30,13 +30,12 @@ const detectCyberbullyingFromImageCaptionPrompt = ai.definePrompt({
   name: 'detectCyberbullyingFromImageCaptionPrompt',
   input: {schema: DetectCyberbullyingFromImageCaptionInputSchema},
   output: {schema: DetectCyberbullyingFromImageCaptionOutputSchema},
-  prompt: `Analyze the following image caption for cyberbullying content. Provide a confidence score between 0 and 1.
+  prompt: `You are an AI assistant specialized in detecting cyberbullying in text content.
+  Analyze the following image caption and determine if it constitutes cyberbullying.
+  Provide a reason for your classification and a confidence score between 0 and 1.
 
-Image Caption: {{{imageCaption}}}
-
-Is Cyberbullying: (true/false)
-Reason: (Explain the reason for the detection, if any)
-Confidence Score: (0-1)`, //Strict schema is requested, so use handlebars
+  Image Caption: {{{imageCaption}}}
+  `,
 });
 
 const detectCyberbullyingFromImageCaptionFlow = ai.defineFlow(

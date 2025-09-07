@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -13,26 +13,42 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Upload } from "lucide-react";
 import {
   detectCyberbullyingFromText,
   DetectCyberbullyingFromTextOutput,
 } from "@/ai/flows/detect-cyberbullying-from-text";
 import {
-  detectCyberbullyingFromImageCaption,
-  DetectCyberbullyingFromImageCaptionOutput,
-} from "@/ai/flows/detect-cyberbullying-from-image-captions";
+  extractTextFromMedia,
+  ExtractTextFromMediaOutput,
+} from "@/ai/flows/extract-text-from-media";
 import { Badge } from "../ui/badge";
 
 type AnalysisResult = {
   textResult?: DetectCyberbullyingFromTextOutput;
-  captionResult?: DetectCyberbullyingFromImageCaptionOutput;
+  mediaResult?: DetectCyberbullyingFromTextOutput;
+  extractedText?: string;
 };
 
 export default function Moderation() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setFileType(file.type);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,29 +58,36 @@ export default function Moderation() {
 
     const formData = new FormData(event.currentTarget);
     const text = formData.get("text") as string;
-    const imageCaption = formData.get("imageCaption") as string;
+    const file = (formData.get("media") as File) ?? null;
 
-    if (!text && !imageCaption) {
-      setError("Please provide text or an image caption to analyze.");
+    if (!text && !file) {
+      setError("Please provide text, an image, or a video to analyze.");
       setIsLoading(false);
       return;
     }
 
     try {
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
-      let captionResult: DetectCyberbullyingFromImageCaptionOutput | undefined;
+      let mediaResult: DetectCyberbullyingFromTextOutput | undefined;
+      let extractedText: string | undefined;
 
       if (text) {
         textResult = await detectCyberbullyingFromText({ text });
       }
 
-      if (imageCaption) {
-        captionResult = await detectCyberbullyingFromImageCaption({
-          imageCaption,
-        });
+      if (file && file.size > 0 && filePreview) {
+        const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
+          { dataUri: filePreview }
+        );
+        extractedText = mediaAnalysis.text;
+        if (extractedText) {
+          mediaResult = await detectCyberbullyingFromText({
+            text: extractedText,
+          });
+        }
       }
 
-      setResult({ textResult, captionResult });
+      setResult({ textResult, mediaResult, extractedText });
     } catch (e) {
       setError("An error occurred during analysis. Please try again.");
       console.error(e);
@@ -82,32 +105,62 @@ export default function Moderation() {
         <CardHeader>
           <CardTitle>Content Moderation</CardTitle>
           <CardDescription>
-            Analyze text, image captions, or video captions for cyberbullying in
-            real-time.
+            Analyze text, images, or videos for cyberbullying. The AI will
+            extract text from media for analysis.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent>
             <div className="grid gap-6">
               <div className="grid gap-3">
-                <Label htmlFor="text">Text or Video Caption</Label>
+                <Label htmlFor="text">Text Content</Label>
                 <Textarea
                   id="text"
                   name="text"
-                  placeholder="Enter text or a video caption to analyze..."
+                  placeholder="Enter text to analyze..."
                   className="min-h-24"
                   disabled={isLoading}
                 />
               </div>
+
               <div className="grid gap-3">
-                <Label htmlFor="imageCaption">Image Caption</Label>
+                <Label htmlFor="media">Image/Video Content</Label>
                 <Input
-                  id="imageCaption"
-                  name="imageCaption"
-                  type="text"
-                  placeholder="Enter an image caption to analyze..."
+                  id="media"
+                  name="media"
+                  type="file"
+                  accept="image/*,video/*"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
                   disabled={isLoading}
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Image or Video
+                </Button>
+                {filePreview && (
+                  <div className="mt-4">
+                    {fileType?.startsWith("image/") ? (
+                      <img
+                        src={filePreview}
+                        alt="Image preview"
+                        className="rounded-md max-h-60 w-auto"
+                      />
+                    ) : (
+                      <video
+                        src={filePreview}
+                        controls
+                        className="rounded-md max-h-60 w-auto"
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -143,7 +196,7 @@ export default function Moderation() {
             {result.textResult && (
               <div>
                 <h3 className="font-semibold text-lg mb-2">
-                  Text/Video Caption Analysis
+                  Text Content Analysis
                 </h3>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
@@ -169,31 +222,39 @@ export default function Moderation() {
                 </div>
               </div>
             )}
-            {result.captionResult && (
+            {result.mediaResult && (
               <div>
                 <h3 className="font-semibold text-lg mb-2">
-                  Image Caption Analysis
+                  Image/Video Content Analysis
                 </h3>
+                {result.extractedText && (
+                  <div className="mb-4">
+                    <p className="font-medium">Extracted Text:</p>
+                    <p className="text-sm text-muted-foreground bg-slate-100 p-4 rounded-md">
+                      {result.extractedText}
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Detection:</span>
                     <Badge
                       variant={getBadgeVariant(
-                        result.captionResult.isCyberbullying
+                        result.mediaResult.isCyberbullying
                       )}
                     >
-                      {result.captionResult.isCyberbullying
+                      {result.mediaResult.isCyberbullying
                         ? "Cyberbullying Detected"
                         : "No Cyberbullying Detected"}
                     </Badge>
                   </div>
                   <p>
                     <span className="font-medium">Reason:</span>{" "}
-                    {result.captionResult.reason}
+                    {result.mediaResult.reason}
                   </p>
                   <p>
                     <span className="font-medium">Confidence Score:</span>{" "}
-                    {(result.captionResult.confidenceScore * 100).toFixed(2)}%
+                    {(result.mediaResult.confidenceScore * 100).toFixed(2)}%
                   </p>
                 </div>
               </div>
