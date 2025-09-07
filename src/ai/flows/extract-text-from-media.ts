@@ -41,6 +41,14 @@ If the media contains no text, describe the media.
 Media: {{media url=dataUri}}
 
 Respond with the extracted text or description.`,
+  config: {
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_LOW_AND_ABOVE',
+      },
+    ],
+  },
 });
 
 const extractTextFromMediaFlow = ai.defineFlow(
