@@ -2,7 +2,7 @@
 
 ShieldAI is a sophisticated web application built with Next.js and Firebase that leverages cutting-edge Generative AI to detect and prevent cyberbullying across multiple modalities, including text, images, and user behavior patterns.
 
-**Live Application:** [**https://shieldai-ab7ge.web.app**](https://shieldai-ab7ge.web.app)
+
 
  
 
