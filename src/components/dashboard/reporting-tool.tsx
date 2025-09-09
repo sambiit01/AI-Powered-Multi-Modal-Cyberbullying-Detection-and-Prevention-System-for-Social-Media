@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { type Activity } from "@/app/page";
 
 const reportSchema = z.object({
   contentUrl: z.string().url({ message: "Please enter a valid URL." }),
@@ -41,7 +42,11 @@ const reportSchema = z.object({
 
 type ReportFormValues = z.infer<typeof reportSchema>;
 
-export default function ReportingTool() {
+type ReportingToolProps = {
+  addActivity: (activity: Omit<Activity, "id" | "date">) => void;
+};
+
+export default function ReportingTool({ addActivity }: ReportingToolProps) {
   const { toast } = useToast();
 
   const form = useForm<ReportFormValues>({
@@ -55,6 +60,13 @@ export default function ReportingTool() {
 
   function onSubmit(data: ReportFormValues) {
     console.log("Report submitted:", data);
+    addActivity({
+      type: "Report",
+      details: `Manual report for: ${data.contentUrl}`,
+      status: "Pending",
+      isCyberbullying: true, // Manual reports are treated as incidents
+    });
+
     toast({
       title: "Report Submitted",
       description:

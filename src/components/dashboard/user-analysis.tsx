@@ -19,12 +19,18 @@ import {
   AnalyzeUserCommunicationPatternsOutput,
 } from "@/ai/flows/analyze-user-communication-patterns";
 import { Progress } from "@/components/ui/progress";
+import { type Activity } from "@/app/page";
 
-export default function UserAnalysis() {
+type UserAnalysisProps = {
+  addActivity: (activity: Omit<Activity, "id" | "date">) => void;
+};
+
+export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] =
     useState<AnalyzeUserCommunicationPatternsOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState("");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,10 +39,12 @@ export default function UserAnalysis() {
     setError(null);
 
     const formData = new FormData(event.currentTarget);
-    const userId = formData.get("userId") as string;
+    const currentUserId = formData.get("userId") as string;
     const messagesRaw = formData.get("messages") as string;
 
-    if (!userId || !messagesRaw) {
+    setUserId(currentUserId);
+
+    if (!currentUserId || !messagesRaw) {
       setError("Please provide a User ID and at least one message.");
       setIsLoading(false);
       return;
@@ -52,10 +60,28 @@ export default function UserAnalysis() {
 
     try {
       const analysisResult = await analyzeUserCommunicationPatterns({
-        userId,
+        userId: currentUserId,
         messages,
       });
       setResult(analysisResult);
+
+      if (analysisResult.bullyingLikelihood > 0.75) {
+        addActivity({
+          type: "User",
+          details: `High-risk behavior detected for user ${currentUserId}`,
+          status: "Flagged",
+          isHighRisk: true,
+          isCyberbullying: true,
+        });
+      }
+      if (analysisResult.victimLikelihood > 0.75) {
+        addActivity({
+          type: "User",
+          details: `User ${currentUserId} identified as potential victim.`,
+          status: "Monitored",
+          isPotentialVictim: true,
+        });
+      }
     } catch (e) {
       setError("An error occurred during analysis. Please try again.");
       console.error(e);
@@ -125,7 +151,7 @@ export default function UserAnalysis() {
       {result && (
         <Card>
           <CardHeader>
-            <CardTitle>Behavioral Analysis Report</CardTitle>
+            <CardTitle>Behavioral Analysis Report for {userId}</CardTitle>
             <CardDescription>
               Likelihood of the user being a bully or a victim.
             </CardDescription>

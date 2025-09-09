@@ -23,6 +23,11 @@ import {
   ExtractTextFromMediaOutput,
 } from "@/ai/flows/extract-text-from-media";
 import { Badge } from "../ui/badge";
+import { type Activity } from "@/app/page";
+
+type ModerationProps = {
+  addActivity: (activity: Omit<Activity, "id" | "date">) => void;
+};
 
 type AnalysisResult = {
   textResult?: DetectCyberbullyingFromTextOutput;
@@ -30,7 +35,7 @@ type AnalysisResult = {
   extractedText?: string;
 };
 
-export default function Moderation() {
+export default function Moderation({ addActivity }: ModerationProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +78,14 @@ export default function Moderation() {
 
       if (text) {
         textResult = await detectCyberbullyingFromText({ text });
+        addActivity({
+          type: "Content",
+          details: `Text: "${
+            text.length > 30 ? text.substring(0, 30) + "..." : text
+          }"`,
+          status: textResult.isCyberbullying ? "Flagged" : "Monitored",
+          isCyberbullying: textResult.isCyberbullying,
+        });
       }
 
       if (file && file.size > 0 && filePreview) {
@@ -83,6 +96,16 @@ export default function Moderation() {
         if (extractedText) {
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
+          });
+          addActivity({
+            type: "Content",
+            details: `Media: "${
+              extractedText.length > 30
+                ? extractedText.substring(0, 30) + "..."
+                : extractedText
+            }"`,
+            status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
+            isCyberbullying: mediaResult.isCyberbullying,
           });
         }
       }

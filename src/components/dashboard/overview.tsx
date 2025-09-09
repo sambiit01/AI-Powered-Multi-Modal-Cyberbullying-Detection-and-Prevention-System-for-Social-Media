@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
+import React from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   Card,
   CardContent,
@@ -35,15 +29,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-
-const chartData = [
-  { month: "January", incidents: 186 },
-  { month: "February", incidents: 305 },
-  { month: "March", incidents: 237 },
-  { month: "April", incidents: 173 },
-  { month: "May", incidents: 209 },
-  { month: "June", incidents: 214 },
-];
+import { type Activity } from "@/app/page";
 
 const chartConfig = {
   incidents: {
@@ -52,54 +38,82 @@ const chartConfig = {
   },
 };
 
-const recentActivities = [
-  {
-    id: "U-123",
-    type: "User",
-    details: "High-risk behavior detected for user @toxic_troll",
-    status: "Flagged",
-    date: "2024-05-28",
-  },
-  {
-    id: "C-456",
-    type: "Content",
-    details: 'Text post "You are worthless" flagged for review.',
-    status: "Flagged",
-    date: "2024-05-28",
-  },
-  {
-    id: "R-789",
-    type: "Report",
-    details: "Manual report submitted for user @cyber_bully_x",
-    status: "Pending",
-    date: "2024-05-27",
-  },
-  {
-    id: "U-101",
-    type: "User",
-    details: "User @victim_support identified as potential victim.",
-    status: "Monitored",
-    date: "2024-05-26",
-  },
-  {
-    id: "C-112",
-    type: "Content",
-    details: "Image with hateful caption flagged for review.",
-    status: "Action Taken",
-    date: "2024-05-25",
-  },
-];
+type OverviewProps = {
+  activities: Activity[];
+};
 
-export default function Overview() {
+export default function Overview({ activities }: OverviewProps) {
+  const incidentsFlagged = activities.filter(
+    (a) => a.isCyberbullying
+  ).length;
+  const highRiskUsers = activities.filter((a) => a.isHighRisk).length;
+  const potentialVictims = activities.filter((a) => a.isPotentialVictim).length;
+  const reportsSubmitted = activities.filter((a) => a.type === "Report").length;
+
+  const chartData = React.useMemo(() => {
+    const months: { [key: string]: number } = {
+      January: 0,
+      February: 0,
+      March: 0,
+      April: 0,
+      May: 0,
+      June: 0,
+      July: 0,
+      August: 0,
+      September: 0,
+      October: 0,
+      November: 0,
+      December: 0,
+    };
+
+    activities.forEach((activity) => {
+      if (activity.isCyberbullying) {
+        const month = new Date(activity.date).toLocaleString("default", {
+          month: "long",
+        });
+        if (months.hasOwnProperty(month)) {
+          months[month]++;
+        }
+      }
+    });
+
+    const currentMonthIndex = new Date().getMonth();
+    const monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+
+    // Get last 6 months including current
+    const last6Months = Array.from({ length: 6 }, (_, i) => {
+      const monthIndex = (currentMonthIndex - i + 12) % 12;
+      return monthNames[monthIndex];
+    }).reverse();
+
+    return last6Months.map((month) => ({
+      month,
+      incidents: months[month] || 0,
+    }));
+  }, [activities]);
+
   return (
     <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Incidents Flagged (24h)</CardDescription>
+            <CardDescription>Incidents Flagged</CardDescription>
             <CardTitle className="text-4xl flex items-center gap-2">
               <ShieldAlert className="h-8 w-8 text-primary" />
-              128
+              {incidentsFlagged}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -108,7 +122,7 @@ export default function Overview() {
             <CardDescription>High-Risk Users</CardDescription>
             <CardTitle className="text-4xl flex items-center gap-2">
               <Users className="h-8 w-8 text-destructive" />
-              32
+              {highRiskUsers}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -117,7 +131,7 @@ export default function Overview() {
             <CardDescription>Potential Victims</CardDescription>
             <CardTitle className="text-4xl flex items-center gap-2">
               <MessageSquareWarning className="h-8 w-8 text-amber-500" />
-              54
+              {potentialVictims}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -126,7 +140,7 @@ export default function Overview() {
             <CardDescription>Reports Submitted</CardDescription>
             <CardTitle className="text-4xl flex items-center gap-2">
               <FileText className="h-8 w-8 text-secondary-foreground" />
-              45
+              {reportsSubmitted}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -178,44 +192,50 @@ export default function Overview() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Details</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentActivities.map((activity) => (
-                  <TableRow key={activity.id}>
-                    <TableCell>
-                      <Badge variant="outline">{activity.type}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{activity.details}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {activity.date}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          activity.status === "Flagged" ||
-                          activity.status === "Action Taken"
-                            ? "destructive"
-                            : activity.status === "Pending"
-                            ? "secondary"
-                            : "default"
-                        }
-                      >
-                        {activity.status}
-                      </Badge>
-                    </TableCell>
+            {activities.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {activities.slice(0, 5).map((activity) => (
+                    <TableRow key={activity.id}>
+                      <TableCell>
+                        <Badge variant="outline">{activity.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{activity.details}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {activity.date}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            activity.status === "Flagged" ||
+                            activity.status === "Action Taken"
+                              ? "destructive"
+                              : activity.status === "Pending"
+                              ? "secondary"
+                              : "default"
+                          }
+                        >
+                          {activity.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                No activity yet.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

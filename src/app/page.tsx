@@ -9,23 +9,46 @@ import UserAnalysis from "@/components/dashboard/user-analysis";
 import ReportingTool from "@/components/dashboard/reporting-tool";
 import Settings from "@/components/dashboard/settings";
 
+export type Activity = {
+  id: string;
+  type: "Content" | "User" | "Report";
+  details: string;
+  status: "Flagged" | "Pending" | "Monitored" | "Action Taken";
+  date: string;
+  isCyberbullying?: boolean;
+  isHighRisk?: boolean;
+  isPotentialVictim?: boolean;
+};
+
 export default function DashboardPage() {
   const [activeView, setActiveView] = React.useState<View>("overview");
+  const [activities, setActivities] = React.useState<Activity[]>([]);
+
+  const addActivity = (activity: Omit<Activity, "id" | "date">) => {
+    setActivities((prev) => [
+      {
+        ...activity,
+        id: `ACT-${prev.length + 1}`,
+        date: new Date().toISOString().split("T")[0],
+      },
+      ...prev,
+    ]);
+  };
 
   const renderView = () => {
     switch (activeView) {
       case "overview":
-        return <Overview />;
+        return <Overview activities={activities} />;
       case "moderation":
-        return <Moderation />;
+        return <Moderation addActivity={addActivity} />;
       case "user-analysis":
-        return <UserAnalysis />;
+        return <UserAnalysis addActivity={addActivity} />;
       case "reporting":
-        return <ReportingTool />;
+        return <ReportingTool addActivity={addActivity} />;
       case "settings":
         return <Settings />;
       default:
-        return <Overview />;
+        return <Overview activities={activities} />;
     }
   };
 
