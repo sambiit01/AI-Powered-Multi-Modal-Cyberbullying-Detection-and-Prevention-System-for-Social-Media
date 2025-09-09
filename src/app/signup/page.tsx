@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const SUPERUSER_EMAIL = "sambit@example.com"; // As per user request
+const SUPERUSER_EMAIL = "sambitbhoumik01@gmail.com";
 
 export default function SignupPage() {
   const router = useRouter();
