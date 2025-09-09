@@ -8,6 +8,7 @@ import Moderation from "@/components/dashboard/moderation";
 import UserAnalysis from "@/components/dashboard/user-analysis";
 import ReportingTool from "@/components/dashboard/reporting-tool";
 import Settings from "@/components/dashboard/settings";
+import ComingSoon from "@/components/dashboard/coming-soon";
 
 export type Activity = {
   id: string;
@@ -40,7 +41,7 @@ export default function DashboardPage() {
       case "overview":
         return <Overview activities={activities} />;
       case "moderation":
-        return <Moderation addActivity={addActivity} />;
+        return <ComingSoon />;
       case "user-analysis":
         return <UserAnalysis addActivity={addActivity} />;
       case "reporting":
