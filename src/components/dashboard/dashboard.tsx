@@ -13,6 +13,7 @@ import UserAnalysis from "@/components/dashboard/user-analysis";
 import ReportingTool from "@/components/dashboard/reporting-tool";
 import Settings from "@/components/dashboard/settings";
 import { Loader2 } from "lucide-react";
+import ComingSoon from "./coming-soon";
 
 export type Activity = {
   id: string;
@@ -70,7 +71,7 @@ export default function Dashboard() {
       case "overview":
         return <Overview activities={activities} />;
       case "moderation":
-        return <Moderation addActivity={addActivity} />;
+        return <ComingSoon />;
       case "user-analysis":
         return <UserAnalysis addActivity={addActivity} />;
       case "reporting":
