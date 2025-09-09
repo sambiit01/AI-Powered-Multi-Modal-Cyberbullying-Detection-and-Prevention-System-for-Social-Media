@@ -19,7 +19,7 @@ import {
   AnalyzeUserCommunicationPatternsOutput,
 } from "@/ai/flows/analyze-user-communication-patterns";
 import { Progress } from "@/components/ui/progress";
-import { type Activity } from "@/app/page";
+import { type Activity } from "./dashboard";
 
 type UserAnalysisProps = {
   addActivity: (activity: Omit<Activity, "id" | "date">) => void;
@@ -66,7 +66,7 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
       setResult(analysisResult);
 
       if (analysisResult.bullyingLikelihood > 0.75) {
-        addActivity({
+        await addActivity({
           type: "User",
           details: `High-risk behavior detected for user ${currentUserId}`,
           status: "Flagged",
@@ -75,7 +75,7 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
         });
       }
       if (analysisResult.victimLikelihood > 0.75) {
-        addActivity({
+        await addActivity({
           type: "User",
           details: `User ${currentUserId} identified as potential victim.`,
           status: "Monitored",

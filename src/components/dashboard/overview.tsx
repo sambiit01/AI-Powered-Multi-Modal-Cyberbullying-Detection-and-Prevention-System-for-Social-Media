@@ -29,7 +29,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { type Activity } from "@/app/page";
+import { type Activity } from "./dashboard";
+import { format } from "date-fns";
 
 const chartConfig = {
   incidents: {
@@ -51,57 +52,28 @@ export default function Overview({ activities }: OverviewProps) {
   const reportsSubmitted = activities.filter((a) => a.type === "Report").length;
 
   const chartData = React.useMemo(() => {
-    const months: { [key: string]: number } = {
-      January: 0,
-      February: 0,
-      March: 0,
-      April: 0,
-      May: 0,
-      June: 0,
-      July: 0,
-      August: 0,
-      September: 0,
-      October: 0,
-      November: 0,
-      December: 0,
-    };
+    const months: { [key: string]: number } = {};
 
+    // Initialize the last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const monthKey = format(d, "yyyy-MM");
+      months[monthKey] = 0;
+    }
+    
     activities.forEach((activity) => {
       if (activity.isCyberbullying) {
-        const month = new Date(activity.date).toLocaleString("default", {
-          month: "long",
-        });
-        if (months.hasOwnProperty(month)) {
-          months[month]++;
+        const monthKey = format(new Date(activity.date), "yyyy-MM");
+        if (months.hasOwnProperty(monthKey)) {
+          months[monthKey]++;
         }
       }
     });
 
-    const currentMonthIndex = new Date().getMonth();
-    const monthNames = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
-
-    // Get last 6 months including current
-    const last6Months = Array.from({ length: 6 }, (_, i) => {
-      const monthIndex = (currentMonthIndex - i + 12) % 12;
-      return monthNames[monthIndex];
-    }).reverse();
-
-    return last6Months.map((month) => ({
-      month,
-      incidents: months[month] || 0,
+    return Object.keys(months).map((key) => ({
+      month: format(new Date(key + "-01T12:00:00"), "MMM"),
+      incidents: months[key] || 0,
     }));
   }, [activities]);
 
@@ -170,6 +142,7 @@ export default function Overview({ activities }: OverviewProps) {
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => `${value}`}
+                  allowDecimals={false}
                 />
                 <ChartTooltip
                   content={<ChartTooltipContent />}
@@ -210,7 +183,7 @@ export default function Overview({ activities }: OverviewProps) {
                       <TableCell>
                         <div className="font-medium">{activity.details}</div>
                         <div className="text-sm text-muted-foreground">
-                          {activity.date}
+                          {format(new Date(activity.date), "MMMM d, yyyy")}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -233,7 +206,7 @@ export default function Overview({ activities }: OverviewProps) {
               </Table>
             ) : (
               <div className="text-center text-muted-foreground py-8">
-                No activity yet.
+                No activity yet. Start by analyzing content or users.
               </div>
             )}
           </CardContent>

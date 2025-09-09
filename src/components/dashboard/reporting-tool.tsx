@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { type Activity } from "@/app/page";
+import { type Activity } from "./dashboard";
 
 const reportSchema = z.object({
   contentUrl: z.string().url({ message: "Please enter a valid URL." }),
@@ -58,9 +58,9 @@ export default function ReportingTool({ addActivity }: ReportingToolProps) {
     },
   });
 
-  function onSubmit(data: ReportFormValues) {
+  async function onSubmit(data: ReportFormValues) {
     console.log("Report submitted:", data);
-    addActivity({
+    await addActivity({
       type: "Report",
       details: `Manual report for: ${data.contentUrl}`,
       status: "Pending",

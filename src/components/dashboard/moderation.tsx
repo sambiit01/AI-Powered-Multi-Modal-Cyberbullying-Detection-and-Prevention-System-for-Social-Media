@@ -23,7 +23,7 @@ import {
   ExtractTextFromMediaOutput,
 } from "@/ai/flows/extract-text-from-media";
 import { Badge } from "../ui/badge";
-import { type Activity } from "@/app/page";
+import { type Activity } from "./dashboard";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date">) => void;
@@ -78,7 +78,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
       if (text) {
         textResult = await detectCyberbullyingFromText({ text });
-        addActivity({
+        await addActivity({
           type: "Content",
           details: `Text: "${
             text.length > 30 ? text.substring(0, 30) + "..." : text
@@ -97,7 +97,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
           });
-          addActivity({
+          await addActivity({
             type: "Content",
             details: `Media: "${
               extractedText.length > 30

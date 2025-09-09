@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   FilePlus2,
   LayoutGrid,
+  LogOut,
   MessageSquareWarning,
   PanelLeft,
   Settings,
@@ -23,6 +24,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ShieldIcon } from "../icons/shield-icon";
 import Image from "next/image";
 import { type View } from "./sidebar";
+import { useAuth } from "@/hooks/use-auth";
 
 type AppHeaderProps = {
   activeView: View;
@@ -40,6 +42,7 @@ const navItems = [
 export function AppHeader({ activeView, setActiveView }: AppHeaderProps) {
   const currentViewLabel =
     navItems.find((item) => item.id === activeView)?.label || "Dashboard";
+  const { user, signOut } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
@@ -99,12 +102,18 @@ export function AppHeader({ activeView, setActiveView }: AppHeaderProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>{user?.email || "My Account"}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>Settings</DropdownMenuItem>
+          <DropdownMenuItem>
+            <Settings className="mr-2 h-4 w-4" />
+            Settings
+          </DropdownMenuItem>
           <DropdownMenuItem>Support</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>Logout</DropdownMenuItem>
+          <DropdownMenuItem onClick={signOut}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
