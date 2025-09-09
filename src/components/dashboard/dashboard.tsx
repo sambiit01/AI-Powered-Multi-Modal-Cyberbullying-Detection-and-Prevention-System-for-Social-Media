@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { collection, addDoc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -35,7 +35,13 @@ export default function Dashboard() {
   React.useEffect(() => {
     if (!user) return;
 
-    const q = query(collection(db, "activities"), orderBy("date", "desc"));
+    const activitiesRef = collection(db, "activities");
+    const q = query(
+      activitiesRef,
+      where("userId", "==", user.uid),
+      orderBy("date", "desc")
+    );
+    
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const activitiesData: Activity[] = [];
       querySnapshot.forEach((doc) => {
@@ -48,6 +54,9 @@ export default function Dashboard() {
       });
       setActivities(activitiesData);
       setLoading(false);
+    }, (error) => {
+        console.error("Error fetching activities: ", error);
+        setLoading(false);
     });
 
     return () => unsubscribe();
@@ -58,7 +67,7 @@ export default function Dashboard() {
     try {
       await addDoc(collection(db, "activities"), {
         ...activity,
-        date: new Date(),
+        date: new date(),
         userId: user.uid,
       });
     } catch (error) {
