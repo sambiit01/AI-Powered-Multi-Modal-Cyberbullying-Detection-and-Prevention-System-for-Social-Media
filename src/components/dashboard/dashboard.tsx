@@ -36,22 +36,29 @@ export default function Dashboard() {
     if (!user) return;
 
     const activitiesRef = collection(db, "activities");
+    // The orderBy clause requires a composite index. Removing it to prevent crashes
+    // until the index is created in the Firebase console.
     const q = query(
       activitiesRef,
-      where("userId", "==", user.uid),
-      orderBy("date", "desc")
+      where("userId", "==", user.uid)
+      // orderBy("date", "desc")
     );
     
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const activitiesData: Activity[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        activitiesData.push({
-          id: doc.id,
-          ...data,
-          date: (data.date as Timestamp).toDate().toISOString(),
-        } as Activity);
+        // Ensure date exists and is a Timestamp before converting
+        if (data.date && typeof data.date.toDate === 'function') {
+            activitiesData.push({
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString(),
+            } as Activity);
+        }
       });
+       // Sort activities on the client-side as a temporary measure
+      activitiesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setActivities(activitiesData);
       setLoading(false);
     }, (error) => {
