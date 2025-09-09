@@ -67,7 +67,7 @@ export default function Dashboard() {
     try {
       await addDoc(collection(db, "activities"), {
         ...activity,
-        date: new date(),
+        date: new Date(),
         userId: user.uid,
       });
     } catch (error) {
