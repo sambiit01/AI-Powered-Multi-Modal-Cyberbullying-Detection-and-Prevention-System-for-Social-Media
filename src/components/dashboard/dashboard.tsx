@@ -87,7 +87,7 @@ export default function Dashboard() {
       case "overview":
         return <Overview activities={activities} />;
       case "moderation":
-        return <ComingSoon />;
+        return <Moderation addActivity={addActivity} />;
       case "user-analysis":
         return <UserAnalysis addActivity={addActivity} />;
       case "reporting":
