@@ -45,9 +45,14 @@ export type AnalyzeUserCommunicationPatternsOutput = z.infer<
 export async function analyzeUserCommunicationPatterns(
   input: AnalyzeUserCommunicationPatternsInput
 ): Promise<AnalyzeUserCommunicationPatternsOutput> {
-  console.log('[AI Flow: analyzeUserCommunicationPatterns] Analyzing user:', input.userId, 'with', input.messages.length, 'messages');
+  console.log('[SERVER: analyzeUserCommunicationPatterns] >>> STARTING BEHAVIORAL ANALYSIS');
+  console.log('[SERVER: analyzeUserCommunicationPatterns] TARGET USER:', input.userId);
+  console.log('[SERVER: analyzeUserCommunicationPatterns] MESSAGE COUNT:', input.messages.length);
+  
   const result = await analyzeUserCommunicationPatternsFlow(input);
-  console.log('[AI Flow: analyzeUserCommunicationPatterns] Analysis complete for:', input.userId);
+  
+  console.log('[SERVER: analyzeUserCommunicationPatterns] <<< BEHAVIORAL ANALYSIS COMPLETE');
+  console.log('[SERVER: analyzeUserCommunicationPatterns] SCORES - Bullying:', result.bullyingLikelihood, 'Victim:', result.victimLikelihood);
   return result;
 }
 
@@ -80,9 +85,9 @@ const analyzeUserCommunicationPatternsFlow = ai.defineFlow(
     outputSchema: AnalyzeUserCommunicationPatternsOutputSchema,
   },
   async input => {
-    console.log('[AI Flow: analyzeUserCommunicationPatternsFlow] Requesting behavioral analysis from AI...');
+    console.log('[SERVER: analyzeUserCommunicationPatternsFlow] REQUESTING PATTERN ANALYSIS FROM AI...');
     const {output} = await prompt(input);
-    console.log('[AI Flow: analyzeUserCommunicationPatternsFlow] Received output scores:', output?.bullyingLikelihood, output?.victimLikelihood);
+    console.log('[SERVER: analyzeUserCommunicationPatternsFlow] AI ANALYSIS RETURNED.');
     return output!;
   }
 );

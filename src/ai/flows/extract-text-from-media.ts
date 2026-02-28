@@ -27,9 +27,13 @@ export type ExtractTextFromMediaOutput = z.infer<typeof ExtractTextFromMediaOutp
 export async function extractTextFromMedia(
   input: ExtractTextFromMediaInput
 ): Promise<ExtractTextFromMediaOutput> {
-  console.log('[AI Flow: extractTextFromMedia] Received media input (data URI length):', input.dataUri.length);
+  console.log('[SERVER: extractTextFromMedia] >>> STARTING MEDIA PROCESSING');
+  console.log('[SERVER: extractTextFromMedia] MEDIA DATA RECEIVED (LENGTH):', input.dataUri.length);
+  
   const result = await extractTextFromMediaFlow(input);
-  console.log('[AI Flow: extractTextFromMedia] Returning extracted text:', result.text);
+  
+  console.log('[SERVER: extractTextFromMedia] <<< MEDIA PROCESSING COMPLETE');
+  console.log('[SERVER: extractTextFromMedia] EXTRACTED TEXT:', result.text);
   return result;
 }
 
@@ -61,9 +65,9 @@ const extractTextFromMediaFlow = ai.defineFlow(
     outputSchema: ExtractTextFromMediaOutputSchema,
   },
   async input => {
-    console.log('[AI Flow: extractTextFromMediaFlow] Processing media with AI...');
+    console.log('[SERVER: extractTextFromMediaFlow] SENDING MEDIA TO VISION AI...');
     const {output} = await prompt(input);
-    console.log('[AI Flow: extractTextFromMediaFlow] AI processing complete.');
+    console.log('[SERVER: extractTextFromMediaFlow] VISION AI RETURNED DATA.');
     return output!;
   }
 );
