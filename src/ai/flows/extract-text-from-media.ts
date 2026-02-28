@@ -27,14 +27,21 @@ export type ExtractTextFromMediaOutput = z.infer<typeof ExtractTextFromMediaOutp
 export async function extractTextFromMedia(
   input: ExtractTextFromMediaInput
 ): Promise<ExtractTextFromMediaOutput> {
+  console.log('--------------------------------------------------');
   console.log('[SERVER: extractTextFromMedia] >>> STARTING MEDIA PROCESSING');
-  console.log('[SERVER: extractTextFromMedia] MEDIA DATA RECEIVED (LENGTH):', input.dataUri.length);
+  console.log('[SERVER: extractTextFromMedia] STEP 1: MEDIA DATA RECEIVED (LENGTH):', input.dataUri.length);
   
-  const result = await extractTextFromMediaFlow(input);
-  
-  console.log('[SERVER: extractTextFromMedia] <<< MEDIA PROCESSING COMPLETE');
-  console.log('[SERVER: extractTextFromMedia] EXTRACTED TEXT:', result.text);
-  return result;
+  try {
+    const result = await extractTextFromMediaFlow(input);
+    
+    console.log('[SERVER: extractTextFromMedia] STEP 3: MEDIA PROCESSING COMPLETE');
+    console.log('[SERVER: extractTextFromMedia] EXTRACTED TEXT:', result.text);
+    console.log('--------------------------------------------------');
+    return result;
+  } catch (error) {
+    console.error('[SERVER: extractTextFromMedia] !!! CRITICAL ERROR:', error);
+    throw error;
+  }
 }
 
 const prompt = ai.definePrompt({
@@ -48,14 +55,6 @@ If the media contains no text, describe the media.
 Media: {{media url=dataUri}}
 
 Respond with the extracted text or description.`,
-  config: {
-    safetySettings: [
-      {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_LOW_AND_ABOVE',
-      },
-    ],
-  },
 });
 
 const extractTextFromMediaFlow = ai.defineFlow(
@@ -65,9 +64,9 @@ const extractTextFromMediaFlow = ai.defineFlow(
     outputSchema: ExtractTextFromMediaOutputSchema,
   },
   async input => {
-    console.log('[SERVER: extractTextFromMediaFlow] SENDING MEDIA TO VISION AI...');
+    console.log('[SERVER: extractTextFromMediaFlow] STEP 2: SENDING MEDIA TO VISION AI...');
     const {output} = await prompt(input);
-    console.log('[SERVER: extractTextFromMediaFlow] VISION AI RETURNED DATA.');
+    console.log('[SERVER: extractTextFromMediaFlow] STEP 2.1: VISION AI RETURNED DATA.');
     return output!;
   }
 );

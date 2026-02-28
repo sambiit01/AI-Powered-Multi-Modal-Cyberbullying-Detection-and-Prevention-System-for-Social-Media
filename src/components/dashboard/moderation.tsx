@@ -46,12 +46,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log("[CLIENT: Moderation] File selected:", file.name, "Type:", file.type);
+      console.log("[CLIENT: Moderation] UI - File selected:", file.name, "Type:", file.type);
       setFileType(file.type);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFilePreview(reader.result as string);
-        console.log("[CLIENT: Moderation] File converted to Data URI for analysis.");
+        console.log("[CLIENT: Moderation] UI - File successfully converted to base64 preview.");
       };
       reader.readAsDataURL(file);
     }
@@ -59,7 +59,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    console.log("[CLIENT: Moderation] User clicked 'Analyze Content'");
+    console.log("--------------------------------------------------");
+    console.log("[CLIENT: Moderation] ACTION - Form Submitted");
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -68,8 +69,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
     const text = formData.get("text") as string;
     const file = (formData.get("media") as File) ?? null;
 
+    console.log("[CLIENT: Moderation] DATA - Text to analyze:", text || "None");
+    console.log("[CLIENT: Moderation] DATA - File to analyze:", file?.name || "None");
+
     if (!text && (!file || file.size === 0)) {
-      console.warn("[CLIENT: Moderation] Submission rejected: No content provided.");
+      console.warn("[CLIENT: Moderation] WARN - No content provided by user.");
       setError("Please provide text, an image, or a video to analyze.");
       setIsLoading(false);
       return;
@@ -81,36 +85,36 @@ export default function Moderation({ addActivity }: ModerationProps) {
       let extractedText: string | undefined;
 
       if (text) {
-        console.log("[CLIENT: Moderation] Sending text to server for analysis:", text);
+        console.log("[CLIENT: Moderation] API - Calling detectCyberbullyingFromText...");
         textResult = await detectCyberbullyingFromText({ text });
-        console.log("[CLIENT: Moderation] Received text analysis result:", textResult);
+        console.log("[CLIENT: Moderation] API - Text Analysis Response Received:", textResult);
         
         await addActivity({
           type: "Content",
-          details: `Text: "${text.length > 30 ? text.substring(0, 30) + "..." : text}"`,
+          details: `Text Analysis: ${text.substring(0, 20)}...`,
           status: textResult.isCyberbullying ? "Flagged" : "Monitored",
           isCyberbullying: textResult.isCyberbullying,
         });
       }
 
       if (file && file.size > 0 && filePreview) {
-        console.log("[CLIENT: Moderation] Sending media to server for text extraction...");
+        console.log("[CLIENT: Moderation] API - Calling extractTextFromMedia...");
         const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
           { dataUri: filePreview }
         );
         extractedText = mediaAnalysis.text;
-        console.log("[CLIENT: Moderation] Extracted text from media:", extractedText);
+        console.log("[CLIENT: Moderation] API - Extracted Text from Media:", extractedText);
 
         if (extractedText) {
-          console.log("[CLIENT: Moderation] Sending extracted text for cyberbullying analysis...");
+          console.log("[CLIENT: Moderation] API - Calling detectCyberbullyingFromText for media text...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
           });
-          console.log("[CLIENT: Moderation] Received media analysis result:", mediaResult);
+          console.log("[CLIENT: Moderation] API - Media Text Analysis Response Received:", mediaResult);
           
           await addActivity({
             type: "Content",
-            details: `Media: "${extractedText.length > 30 ? extractedText.substring(0, 30) + "..." : extractedText}"`,
+            details: `Media Analysis: ${extractedText.substring(0, 20)}...`,
             status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
             isCyberbullying: mediaResult.isCyberbullying,
           });
@@ -118,9 +122,10 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       setResult({ textResult, mediaResult, extractedText });
-      console.log("[CLIENT: Moderation] All analysis steps complete.");
+      console.log("[CLIENT: Moderation] UI - Results updated on screen.");
+      console.log("--------------------------------------------------");
     } catch (e) {
-      console.error("[CLIENT: Moderation] CRITICAL FAILURE:", e);
+      console.error("[CLIENT: Moderation] ERR - CRITICAL FAILURE:", e);
       setError("An error occurred during analysis. Please try again.");
     } finally {
       setIsLoading(false);
@@ -170,7 +175,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    console.log("[CLIENT: Moderation] Triggered file browser.");
+                    console.log("[CLIENT: Moderation] UI - Upload button clicked.");
                     fileInputRef.current?.click();
                   }}
                   disabled={isLoading}

@@ -35,14 +35,21 @@ export type DetectCyberbullyingFromTextOutput = z.infer<
 export async function detectCyberbullyingFromText(
   input: DetectCyberbullyingFromTextInput
 ): Promise<DetectCyberbullyingFromTextOutput> {
+  console.log('--------------------------------------------------');
   console.log('[SERVER: detectCyberbullyingFromText] >>> STARTING ANALYSIS');
-  console.log('[SERVER: detectCyberbullyingFromText] INPUT TEXT:', input.text);
+  console.log('[SERVER: detectCyberbullyingFromText] STEP 1: RECEIVED INPUT TEXT:', input.text);
   
-  const result = await detectCyberbullyingFromTextFlow(input);
-  
-  console.log('[SERVER: detectCyberbullyingFromText] <<< ANALYSIS COMPLETE');
-  console.log('[SERVER: detectCyberbullyingFromText] RESULT:', JSON.stringify(result, null, 2));
-  return result;
+  try {
+    const result = await detectCyberbullyingFromTextFlow(input);
+    
+    console.log('[SERVER: detectCyberbullyingFromText] STEP 3: ANALYSIS COMPLETE');
+    console.log('[SERVER: detectCyberbullyingFromText] FINAL OUTPUT:', JSON.stringify(result, null, 2));
+    console.log('--------------------------------------------------');
+    return result;
+  } catch (error) {
+    console.error('[SERVER: detectCyberbullyingFromText] !!! CRITICAL ERROR:', error);
+    throw error;
+  }
 }
 
 const detectCyberbullyingPrompt = ai.definePrompt({
@@ -70,9 +77,9 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     outputSchema: DetectCyberbullyingFromTextOutputSchema,
   },
   async input => {
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] INVOKING AI MODEL...');
+    console.log('[SERVER: detectCyberbullyingFromTextFlow] STEP 2: SENDING TO GEMINI AI...');
     const {output} = await detectCyberbullyingPrompt(input);
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] AI MODEL RESPONDED.');
+    console.log('[SERVER: detectCyberbullyingFromTextFlow] STEP 2.1: GEMINI AI RESPONDED.');
     return output!;
   }
 );
