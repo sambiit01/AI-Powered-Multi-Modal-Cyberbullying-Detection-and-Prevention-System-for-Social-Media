@@ -6,9 +6,17 @@ import {enableFirebaseTelemetry} from '@genkit-ai/firebase';
 /**
  * Enable Genkit monitoring and telemetry.
  * This sends traces to the Firebase Console (Genkit tab) for debugging and performance monitoring.
- * Note: Ensure GCLOUD_PROJECT is set to 'shieldai-ab7ge' in Vercel environment variables.
+ * 
+ * IMPORTANT FOR VERCEL USERS:
+ * 1. You must be on the Firebase Blaze (Pay-as-you-go) plan to enable the underlying 
+ *    Google Cloud Logging and Tracing APIs.
+ * 2. Ensure GCLOUD_PROJECT is set to 'shieldai-ab7ge' in Vercel environment variables.
+ * 3. Telemetry usage is free within generous Google Cloud limits (Spark plan projects 
+ *    cannot report telemetry data).
  */
-enableFirebaseTelemetry();
+if (process.env.GCLOUD_PROJECT) {
+  enableFirebaseTelemetry();
+}
 
 export const ai = genkit({
   plugins: [
