@@ -46,12 +46,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log("[CLIENT: Moderation] UI - File selected:", file.name, "Type:", file.type);
+      console.log("[CLIENT] >>> FILE SELECTED:", file.name, "TYPE:", file.type);
       setFileType(file.type);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFilePreview(reader.result as string);
-        console.log("[CLIENT: Moderation] UI - File successfully converted to base64 preview.");
+        console.log("[CLIENT] >>> FILE PREVIEW GENERATED (Base64)");
       };
       reader.readAsDataURL(file);
     }
@@ -59,8 +59,10 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    console.log("--------------------------------------------------");
-    console.log("[CLIENT: Moderation] ACTION - Form Submitted");
+    console.log("\n[CLIENT] **************************************************");
+    console.log("[CLIENT] * ACTION: ANALYZE CONTENT BUTTON CLICKED        *");
+    console.log("[CLIENT] **************************************************\n");
+    
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -69,11 +71,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
     const text = formData.get("text") as string;
     const file = (formData.get("media") as File) ?? null;
 
-    console.log("[CLIENT: Moderation] DATA - Text to analyze:", text || "None");
-    console.log("[CLIENT: Moderation] DATA - File to analyze:", file?.name || "None");
+    console.log("[CLIENT] DATA TO PROCESS -> Text:", text || "None");
+    console.log("[CLIENT] DATA TO PROCESS -> File:", file?.name || "None");
 
     if (!text && (!file || file.size === 0)) {
-      console.warn("[CLIENT: Moderation] WARN - No content provided by user.");
+      console.error("[CLIENT] ERROR: No content provided.");
       setError("Please provide text, an image, or a video to analyze.");
       setIsLoading(false);
       return;
@@ -85,36 +87,36 @@ export default function Moderation({ addActivity }: ModerationProps) {
       let extractedText: string | undefined;
 
       if (text) {
-        console.log("[CLIENT: Moderation] API - Calling detectCyberbullyingFromText...");
+        console.log("[CLIENT] FLOW: Starting Text Analysis...");
         textResult = await detectCyberbullyingFromText({ text });
-        console.log("[CLIENT: Moderation] API - Text Analysis Response Received:", textResult);
+        console.log("[CLIENT] FLOW: Text Analysis Finished. Result:", textResult.isCyberbullying ? "FLAGGED" : "CLEAN");
         
         await addActivity({
           type: "Content",
-          details: `Text Analysis: ${text.substring(0, 20)}...`,
+          details: `Text Analysis: ${text.substring(0, 30)}...`,
           status: textResult.isCyberbullying ? "Flagged" : "Monitored",
           isCyberbullying: textResult.isCyberbullying,
         });
       }
 
       if (file && file.size > 0 && filePreview) {
-        console.log("[CLIENT: Moderation] API - Calling extractTextFromMedia...");
+        console.log("[CLIENT] FLOW: Starting Media Analysis (Vision AI)...");
         const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
           { dataUri: filePreview }
         );
         extractedText = mediaAnalysis.text;
-        console.log("[CLIENT: Moderation] API - Extracted Text from Media:", extractedText);
+        console.log("[CLIENT] FLOW: Text Extracted from Media:", extractedText);
 
         if (extractedText) {
-          console.log("[CLIENT: Moderation] API - Calling detectCyberbullyingFromText for media text...");
+          console.log("[CLIENT] FLOW: Analyzing Extracted Text for Bullying...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
           });
-          console.log("[CLIENT: Moderation] API - Media Text Analysis Response Received:", mediaResult);
+          console.log("[CLIENT] FLOW: Media Content Result:", mediaResult.isCyberbullying ? "FLAGGED" : "CLEAN");
           
           await addActivity({
             type: "Content",
-            details: `Media Analysis: ${extractedText.substring(0, 20)}...`,
+            details: `Media Analysis: ${extractedText.substring(0, 30)}...`,
             status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
             isCyberbullying: mediaResult.isCyberbullying,
           });
@@ -122,11 +124,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       setResult({ textResult, mediaResult, extractedText });
-      console.log("[CLIENT: Moderation] UI - Results updated on screen.");
-      console.log("--------------------------------------------------");
+      console.log("[CLIENT] **************************************************");
+      console.log("[CLIENT] * UI UPDATED WITH FINAL RESULTS                  *");
+      console.log("[CLIENT] **************************************************\n");
     } catch (e) {
-      console.error("[CLIENT: Moderation] ERR - CRITICAL FAILURE:", e);
-      setError("An error occurred during analysis. Please try again.");
+      console.error("[CLIENT] CRITICAL ERROR IN HANDLESUBMIT:", e);
+      setError("An error occurred during analysis. Please check your internet and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -175,7 +178,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    console.log("[CLIENT: Moderation] UI - Upload button clicked.");
                     fileInputRef.current?.click();
                   }}
                   disabled={isLoading}
