@@ -27,7 +27,10 @@ export type ExtractTextFromMediaOutput = z.infer<typeof ExtractTextFromMediaOutp
 export async function extractTextFromMedia(
   input: ExtractTextFromMediaInput
 ): Promise<ExtractTextFromMediaOutput> {
-  return extractTextFromMediaFlow(input);
+  console.log('[AI Flow: extractTextFromMedia] Received media input (data URI length):', input.dataUri.length);
+  const result = await extractTextFromMediaFlow(input);
+  console.log('[AI Flow: extractTextFromMedia] Returning extracted text:', result.text);
+  return result;
 }
 
 const prompt = ai.definePrompt({
@@ -58,7 +61,9 @@ const extractTextFromMediaFlow = ai.defineFlow(
     outputSchema: ExtractTextFromMediaOutputSchema,
   },
   async input => {
+    console.log('[AI Flow: extractTextFromMediaFlow] Processing media with AI...');
     const {output} = await prompt(input);
+    console.log('[AI Flow: extractTextFromMediaFlow] AI processing complete.');
     return output!;
   }
 );

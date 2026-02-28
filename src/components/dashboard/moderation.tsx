@@ -46,10 +46,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      console.log("[Moderation] File selected:", file.name, "Type:", file.type, "Size:", file.size);
       setFileType(file.type);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFilePreview(reader.result as string);
+        console.log("[Moderation] File loaded into memory as Data URI.");
       };
       reader.readAsDataURL(file);
     }
@@ -57,6 +59,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    console.log("[Moderation] Analyzing content started...");
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -65,7 +68,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
     const text = formData.get("text") as string;
     const file = (formData.get("media") as File) ?? null;
 
-    if (!text && !file) {
+    if (!text && (!file || file.size === 0)) {
+      console.warn("[Moderation] Submit attempted without any content.");
       setError("Please provide text, an image, or a video to analyze.");
       setIsLoading(false);
       return;
@@ -77,7 +81,9 @@ export default function Moderation({ addActivity }: ModerationProps) {
       let extractedText: string | undefined;
 
       if (text) {
+        console.log("[Moderation] Analyzing raw text:", text);
         textResult = await detectCyberbullyingFromText({ text });
+        console.log("[Moderation] Text analysis result:", textResult);
         await addActivity({
           type: "Content",
           details: `Text: "${
@@ -89,14 +95,19 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       if (file && file.size > 0 && filePreview) {
+        console.log("[Moderation] Extracting text from media...");
         const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
           { dataUri: filePreview }
         );
         extractedText = mediaAnalysis.text;
+        console.log("[Moderation] Extracted text from media:", extractedText);
+
         if (extractedText) {
+          console.log("[Moderation] Analyzing extracted text...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
           });
+          console.log("[Moderation] Media analysis result:", mediaResult);
           await addActivity({
             type: "Content",
             details: `Media: "${
@@ -111,9 +122,10 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       setResult({ textResult, mediaResult, extractedText });
+      console.log("[Moderation] Full analysis completed successfully.");
     } catch (e) {
+      console.error("[Moderation] Analysis failed:", e);
       setError("An error occurred during analysis. Please try again.");
-      console.error(e);
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +173,10 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    console.log("[Moderation] Manual file upload triggered.");
+                    fileInputRef.current?.click();
+                  }}
                   disabled={isLoading}
                 >
                   <Upload className="mr-2 h-4 w-4" />

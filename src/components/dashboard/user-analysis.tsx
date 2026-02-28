@@ -34,6 +34,7 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    console.log("[UserAnalysis] Behavioral analysis started...");
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -45,12 +46,14 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
     setUserId(currentUserId);
 
     if (!currentUserId || !messagesRaw) {
+      console.warn("[UserAnalysis] Analysis failed: Missing User ID or messages.");
       setError("Please provide a User ID and at least one message.");
       setIsLoading(false);
       return;
     }
 
     const messages = messagesRaw.split("\n").filter((msg) => msg.trim() !== "");
+    console.log("[UserAnalysis] Analyzing", messages.length, "messages for user:", currentUserId);
 
     if (messages.length === 0) {
       setError("Please provide at least one message.");
@@ -63,9 +66,11 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
         userId: currentUserId,
         messages,
       });
+      console.log("[UserAnalysis] Behavioral analysis result:", analysisResult);
       setResult(analysisResult);
 
       if (analysisResult.bullyingLikelihood > 0.75) {
+        console.log("[UserAnalysis] High bullying likelihood detected! Flagging activity...");
         await addActivity({
           type: "User",
           details: `High-risk behavior detected for user ${currentUserId}`,
@@ -75,6 +80,7 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
         });
       }
       if (analysisResult.victimLikelihood > 0.75) {
+        console.log("[UserAnalysis] High victim likelihood detected! Flagging activity...");
         await addActivity({
           type: "User",
           details: `User ${currentUserId} identified as potential victim.`,
@@ -83,8 +89,8 @@ export default function UserAnalysis({ addActivity }: UserAnalysisProps) {
         });
       }
     } catch (e) {
+      console.error("[UserAnalysis] Analysis failed:", e);
       setError("An error occurred during analysis. Please try again.");
-      console.error(e);
     } finally {
       setIsLoading(false);
     }

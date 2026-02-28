@@ -13,7 +13,6 @@ import UserAnalysis from "@/components/dashboard/user-analysis";
 import ReportingTool from "@/components/dashboard/reporting-tool";
 import Settings from "@/components/dashboard/settings";
 import { Loader2 } from "lucide-react";
-import ComingSoon from "./coming-soon";
 
 export type Activity = {
   id: string;
@@ -33,22 +32,23 @@ export default function Dashboard() {
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      console.log("[Dashboard] No user found, skipping activity subscription.");
+      return;
+    }
 
+    console.log("[Dashboard] Setting up real-time activity subscription for user:", user.uid);
     const activitiesRef = collection(db, "activities");
-    // The orderBy clause requires a composite index. Removing it to prevent crashes
-    // until the index is created in the Firebase console.
     const q = query(
       activitiesRef,
       where("userId", "==", user.uid)
-      // orderBy("date", "desc")
     );
     
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      console.log("[Dashboard] Firestore update received. Activity count:", querySnapshot.size);
       const activitiesData: Activity[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        // Ensure date exists and is a Timestamp before converting
         if (data.date && typeof data.date.toDate === 'function') {
             activitiesData.push({
             id: doc.id,
@@ -57,32 +57,37 @@ export default function Dashboard() {
             } as Activity);
         }
       });
-       // Sort activities on the client-side as a temporary measure
       activitiesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setActivities(activitiesData);
       setLoading(false);
     }, (error) => {
-        console.error("Error fetching activities: ", error);
+        console.error("[Dashboard] Error fetching activities: ", error);
         setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log("[Dashboard] Unsubscribing from activity feed.");
+      unsubscribe();
+    };
   }, [user]);
 
   const addActivity = async (activity: Omit<Activity, "id" | "date">) => {
      if (!user) return;
+    console.log("[Dashboard] Adding new activity to Firestore:", activity);
     try {
-      await addDoc(collection(db, "activities"), {
+      const docRef = await addDoc(collection(db, "activities"), {
         ...activity,
         date: new Date(),
         userId: user.uid,
       });
+      console.log("[Dashboard] Activity saved successfully with ID:", docRef.id);
     } catch (error) {
-      console.error("Error adding activity: ", error);
+      console.error("[Dashboard] Error adding activity: ", error);
     }
   };
 
   const renderView = () => {
+    console.log("[Dashboard] Rendering view:", activeView);
     switch (activeView) {
       case "overview":
         return <Overview activities={activities} />;

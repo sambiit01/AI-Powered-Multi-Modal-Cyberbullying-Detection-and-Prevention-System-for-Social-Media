@@ -35,7 +35,10 @@ export type DetectCyberbullyingFromTextOutput = z.infer<
 export async function detectCyberbullyingFromText(
   input: DetectCyberbullyingFromTextInput
 ): Promise<DetectCyberbullyingFromTextOutput> {
-  return detectCyberbullyingFromTextFlow(input);
+  console.log('[AI Flow: detectCyberbullyingFromText] Received input:', JSON.stringify(input, null, 2));
+  const result = await detectCyberbullyingFromTextFlow(input);
+  console.log('[AI Flow: detectCyberbullyingFromText] Returning result:', JSON.stringify(result, null, 2));
+  return result;
 }
 
 const detectCyberbullyingPrompt = ai.definePrompt({
@@ -63,7 +66,9 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     outputSchema: DetectCyberbullyingFromTextOutputSchema,
   },
   async input => {
+    console.log('[AI Flow: detectCyberbullyingFromTextFlow] Calling AI model with prompt...');
     const {output} = await detectCyberbullyingPrompt(input);
+    console.log('[AI Flow: detectCyberbullyingFromTextFlow] AI model response received.');
     return output!;
   }
 );

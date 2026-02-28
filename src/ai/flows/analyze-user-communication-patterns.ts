@@ -45,7 +45,10 @@ export type AnalyzeUserCommunicationPatternsOutput = z.infer<
 export async function analyzeUserCommunicationPatterns(
   input: AnalyzeUserCommunicationPatternsInput
 ): Promise<AnalyzeUserCommunicationPatternsOutput> {
-  return analyzeUserCommunicationPatternsFlow(input);
+  console.log('[AI Flow: analyzeUserCommunicationPatterns] Analyzing user:', input.userId, 'with', input.messages.length, 'messages');
+  const result = await analyzeUserCommunicationPatternsFlow(input);
+  console.log('[AI Flow: analyzeUserCommunicationPatterns] Analysis complete for:', input.userId);
+  return result;
 }
 
 const prompt = ai.definePrompt({
@@ -77,7 +80,9 @@ const analyzeUserCommunicationPatternsFlow = ai.defineFlow(
     outputSchema: AnalyzeUserCommunicationPatternsOutputSchema,
   },
   async input => {
+    console.log('[AI Flow: analyzeUserCommunicationPatternsFlow] Requesting behavioral analysis from AI...');
     const {output} = await prompt(input);
+    console.log('[AI Flow: analyzeUserCommunicationPatternsFlow] Received output scores:', output?.bullyingLikelihood, output?.victimLikelihood);
     return output!;
   }
 );
