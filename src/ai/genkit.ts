@@ -1,5 +1,13 @@
 import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
+import {enableFirebaseTelemetry} from '@genkit-ai/firebase';
+
+/**
+ * Enable Genkit monitoring and telemetry.
+ * This sends traces to the Firebase Console (Genkit tab) for debugging and performance monitoring.
+ * Note: When running on Vercel, ensure GCLOUD_PROJECT is set in environment variables.
+ */
+enableFirebaseTelemetry();
 
 export const ai = genkit({
   plugins: [googleAI()],
