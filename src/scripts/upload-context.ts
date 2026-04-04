@@ -36,7 +36,12 @@ async function uploadCSVData() {
     }
 
     console.log(`[UPLOAD SCRIPT] STEP 1: READING FILE: ${fileName}`);
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    let fileContent = fs.readFileSync(filePath, 'utf-8');
+    
+    // Remove Byte Order Mark (BOM) if present (common in Excel CSVs)
+    if (fileContent.charCodeAt(0) === 0xFEFF) {
+      fileContent = fileContent.slice(1);
+    }
 
     try {
       console.log(`[UPLOAD SCRIPT] STEP 2: PARSING CSV CONTENT...`);
@@ -44,25 +49,40 @@ async function uploadCSVData() {
         columns: true,
         skip_empty_lines: true,
         trim: true,
-        relax_column_count: true // Helps with varying row lengths if any
+        relax_column_count: true
       });
+
+      if (records.length === 0) {
+        console.warn(`[UPLOAD SCRIPT] No records found in ${fileName}.`);
+        continue;
+      }
+
+      // Log headers of the first record to debug
+      const headers = Object.keys(records[0]);
+      console.log(`[UPLOAD SCRIPT] Detected headers: ${headers.join(', ')}`);
 
       console.log(`[UPLOAD SCRIPT] STEP 3: UPLOADING ${records.length} RECORDS TO FIRESTORE...`);
 
       for (const [index, record] of records.entries()) {
+        // Find keys case-insensitively
+        const findValue = (keyName: string) => {
+          const match = Object.keys(record).find(k => k.toLowerCase().trim() === keyName.toLowerCase());
+          return match ? record[match] : '';
+        };
+
         const data = {
-          text: record.text || '',
-          relationship: record.relationship || '',
-          history: record.history || '',
-          label: record.label || '',
+          text: findValue('text'),
+          relationship: findValue('relationship'),
+          history: findValue('history'),
+          label: findValue('label'),
           sourceFile: fileName,
           uploadedAt: new Date().toISOString()
         };
 
         await addDoc(collection(db, 'contextExamples'), data);
         
-        if ((index + 1) % 10 === 0 || index === records.length - 1) {
-          console.log(`[UPLOAD SCRIPT] PROGRESS: ${index + 1}/${records.length} records uploaded from ${fileName}.`);
+        if ((index + 1) % 50 === 0 || index === records.length - 1) {
+          console.log(`[UPLOAD SCRIPT] PROGRESS: ${index + 1}/${records.length} records processed for ${fileName}.`);
         }
       }
 
