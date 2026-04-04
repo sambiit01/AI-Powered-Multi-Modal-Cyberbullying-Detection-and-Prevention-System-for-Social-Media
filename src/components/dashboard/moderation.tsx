@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, AlertCircle, Upload } from "lucide-react";
+import { Loader2, AlertCircle, Upload, User } from "lucide-react";
 import {
   detectCyberbullyingFromText,
   DetectCyberbullyingFromTextOutput,
@@ -24,6 +24,7 @@ import {
 } from "@/ai/flows/extract-text-from-media";
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
+import { useAuth } from "@/hooks/use-auth";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date">) => void;
@@ -36,6 +37,7 @@ type AnalysisResult = {
 };
 
 export default function Moderation({ addActivity }: ModerationProps) {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +71,16 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
     const formData = new FormData(event.currentTarget);
     const text = formData.get("text") as string;
+    const receiverId = (formData.get("receiverId") as string) || "anonymous_receiver";
     const file = (formData.get("media") as File) ?? null;
 
+    if (!user) {
+      setError("You must be logged in to perform analysis.");
+      setIsLoading(false);
+      return;
+    }
+
+    console.log("[CLIENT] CONTEXT -> Sender:", user.uid, "Receiver:", receiverId);
     console.log("[CLIENT] DATA TO PROCESS -> Text:", text || "None");
     console.log("[CLIENT] DATA TO PROCESS -> File:", file?.name || "None");
 
@@ -87,8 +97,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
       let extractedText: string | undefined;
 
       if (text) {
-        console.log("[CLIENT] FLOW: Starting Text Analysis...");
-        textResult = await detectCyberbullyingFromText({ text });
+        console.log("[CLIENT] FLOW: Starting Text Analysis with context...");
+        textResult = await detectCyberbullyingFromText({ 
+          text, 
+          senderId: user.uid, 
+          receiverId 
+        });
         console.log("[CLIENT] FLOW: Text Analysis Finished. Result:", textResult.isCyberbullying ? "FLAGGED" : "CLEAN");
         
         await addActivity({
@@ -108,9 +122,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
         console.log("[CLIENT] FLOW: Text Extracted from Media:", extractedText);
 
         if (extractedText) {
-          console.log("[CLIENT] FLOW: Analyzing Extracted Text for Bullying...");
+          console.log("[CLIENT] FLOW: Analyzing Extracted Text for Bullying with context...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
+            senderId: user.uid,
+            receiverId
           });
           console.log("[CLIENT] FLOW: Media Content Result:", mediaResult.isCyberbullying ? "FLAGGED" : "CLEAN");
           
@@ -129,7 +145,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       console.log("[CLIENT] **************************************************\n");
     } catch (e) {
       console.error("[CLIENT] CRITICAL ERROR IN HANDLESUBMIT:", e);
-      setError("An error occurred during analysis. Please check your internet and try again.");
+      setError("An error occurred during analysis. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -142,80 +158,97 @@ export default function Moderation({ addActivity }: ModerationProps) {
     <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
       <Card>
         <CardHeader>
-          <CardTitle>Content Moderation</CardTitle>
+          <CardTitle>Contextual Content Moderation</CardTitle>
           <CardDescription>
-            Analyze text, images, or videos for cyberbullying. The AI will
-            extract text from media for analysis.
+            Analyze interactions between users. The AI considers relationship history to accurately identify harassment.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent>
-            <div className="grid gap-6">
-              <div className="grid gap-3">
-                <Label htmlFor="text">Text Content</Label>
-                <Textarea
-                  id="text"
-                  name="text"
-                  placeholder="Enter text to analyze..."
-                  className="min-h-24"
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="media">Image/Video Content</Label>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 p-4 bg-muted/50 rounded-lg border">
+              <div className="grid gap-2">
+                <Label htmlFor="receiverId" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Receiver User ID
+                </Label>
                 <Input
-                  id="media"
-                  name="media"
-                  type="file"
-                  accept="image/*,video/*"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  className="hidden"
+                  id="receiverId"
+                  name="receiverId"
+                  placeholder="e.g. user_target_123"
+                  defaultValue="anonymous_receiver"
                   disabled={isLoading}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                  }}
-                  disabled={isLoading}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Image or Video
-                </Button>
-                {filePreview && (
-                  <div className="mt-4">
-                    {fileType?.startsWith("image/") ? (
-                      <img
-                        src={filePreview}
-                        alt="Image preview"
-                        className="rounded-md max-h-60 w-auto"
-                      />
-                    ) : (
-                      <video
-                        src={filePreview}
-                        controls
-                        className="rounded-md max-h-60 w-auto"
-                      />
-                    )}
-                  </div>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  The ID of the user receiving this message/content.
+                </p>
               </div>
             </div>
+
+            <div className="grid gap-3">
+              <Label htmlFor="text">Text Content</Label>
+              <Textarea
+                id="text"
+                name="text"
+                placeholder="Enter text to analyze..."
+                className="min-h-24"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="grid gap-3">
+              <Label htmlFor="media">Image/Video Content</Label>
+              <Input
+                id="media"
+                name="media"
+                type="file"
+                accept="image/*,video/*"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  fileInputRef.current?.click();
+                }}
+                disabled={isLoading}
+                className="w-full h-20 border-dashed"
+              >
+                <Upload className="mr-2 h-5 w-5" />
+                Click to Upload Media
+              </Button>
+              {filePreview && (
+                <div className="mt-4 border rounded-lg overflow-hidden bg-black flex justify-center">
+                  {fileType?.startsWith("image/") ? (
+                    <img
+                      src={filePreview}
+                      alt="Image preview"
+                      className="max-h-60 w-auto object-contain"
+                    />
+                  ) : (
+                    <video
+                      src={filePreview}
+                      controls
+                      className="max-h-60 w-auto"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
-          <CardFooter className="border-t px-6 py-4">
-            <Button type="submit" disabled={isLoading}>
+          <CardFooter className="border-t px-6 py-4 bg-muted/20">
+            <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Analyze Content
+              Analyze with Context
             </Button>
           </CardFooter>
         </form>
       </Card>
 
       {error && (
-        <Card className="border-destructive">
+        <Card className="border-destructive bg-destructive/5">
           <CardHeader className="flex flex-row items-center gap-3">
             <AlertCircle className="h-6 w-6 text-destructive" />
             <div>
@@ -229,74 +262,76 @@ export default function Moderation({ addActivity }: ModerationProps) {
       )}
 
       {result && (
-        <Card>
+        <Card className="animate-in fade-in slide-in-from-bottom-2 duration-300">
           <CardHeader>
-            <CardTitle>Analysis Results</CardTitle>
+            <CardTitle>AI Analysis Results</CardTitle>
+            <CardDescription>Context-aware assessment of the interaction.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-8">
             {result.textResult && (
-              <div>
-                <h3 className="font-semibold text-lg mb-2">
-                  Text Content Analysis
+              <div className="p-4 rounded-lg border bg-muted/30">
+                <h3 className="font-semibold text-lg mb-4 flex items-center justify-between">
+                  Text Content
+                  <Badge
+                    variant={getBadgeVariant(
+                      result.textResult.isCyberbullying
+                    )}
+                    className="ml-2"
+                  >
+                    {result.textResult.isCyberbullying
+                      ? "Flagged"
+                      : "Clean"}
+                  </Badge>
                 </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Detection:</span>
-                    <Badge
-                      variant={getBadgeVariant(
-                        result.textResult.isCyberbullying
-                      )}
-                    >
-                      {result.textResult.isCyberbullying
-                        ? "Cyberbullying Detected"
-                        : "No Cyberbullying Detected"}
-                    </Badge>
+                <div className="grid gap-4">
+                  <div className="text-sm">
+                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">Reasoning:</span>
+                    <p className="leading-relaxed">
+                      {result.textResult.reason}
+                    </p>
                   </div>
-                  <p>
-                    <span className="font-medium">Reason:</span>{" "}
-                    {result.textResult.reason}
-                  </p>
-                  <p>
-                    <span className="font-medium">Confidence Score:</span>{" "}
-                    {(result.textResult.confidenceScore * 100).toFixed(2)}%
-                  </p>
+                  <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+                    <span>Confidence</span>
+                    <span className="font-mono">{(result.textResult.confidenceScore * 100).toFixed(2)}%</span>
+                  </div>
                 </div>
               </div>
             )}
+
             {result.mediaResult && (
-              <div>
-                <h3 className="font-semibold text-lg mb-2">
-                  Image/Video Content Analysis
+              <div className="p-4 rounded-lg border bg-muted/30">
+                <h3 className="font-semibold text-lg mb-4 flex items-center justify-between">
+                  Media Content
+                  <Badge
+                    variant={getBadgeVariant(
+                      result.mediaResult.isCyberbullying
+                    )}
+                    className="ml-2"
+                  >
+                    {result.mediaResult.isCyberbullying
+                      ? "Flagged"
+                      : "Clean"}
+                  </Badge>
                 </h3>
                 {result.extractedText && (
                   <div className="mb-4">
-                    <p className="font-medium">Extracted Text:</p>
-                    <p className="text-sm text-muted-foreground bg-slate-100 p-4 rounded-md">
-                      {result.extractedText}
+                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">Extracted Text:</span>
+                    <p className="text-sm italic p-3 bg-background rounded border">
+                      "{result.extractedText}"
                     </p>
                   </div>
                 )}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Detection:</span>
-                    <Badge
-                      variant={getBadgeVariant(
-                        result.mediaResult.isCyberbullying
-                      )}
-                    >
-                      {result.mediaResult.isCyberbullying
-                        ? "Cyberbullying Detected"
-                        : "No Cyberbullying Detected"}
-                    </Badge>
+                <div className="grid gap-4">
+                  <div className="text-sm">
+                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">Reasoning:</span>
+                    <p className="leading-relaxed">
+                      {result.mediaResult.reason}
+                    </p>
                   </div>
-                  <p>
-                    <span className="font-medium">Reason:</span>{" "}
-                    {result.mediaResult.reason}
-                  </p>
-                  <p>
-                    <span className="font-medium">Confidence Score:</span>{" "}
-                    {(result.mediaResult.confidenceScore * 100).toFixed(2)}%
-                  </p>
+                  <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+                    <span>Confidence</span>
+                    <span className="font-mono">{(result.mediaResult.confidenceScore * 100).toFixed(2)}%</span>
+                  </div>
                 </div>
               </div>
             )}
