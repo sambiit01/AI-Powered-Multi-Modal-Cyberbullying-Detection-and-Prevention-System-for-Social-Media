@@ -1,0 +1,101 @@
+Text,Speaker Role,Target Role,Relationship,History,Frequency,Platform,Label
+I'll kill you 😘,Girlfriend,User,Intimate,Friendly,Rare,WhatsApp,Not Bullying
+I'll kill you,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+You're an idiot 😂,Best Friend,User,Close Friend,Friendly,Frequent,WhatsApp,Not Bullying
+You're an idiot,Anonymous,User,Unknown,None,One-time,Instagram,Bullying
+I hate you 😜,Sibling,User,Family,Playful,Occasional,SMS,Not Bullying
+I hate you,Ex-partner,User,Ex-relationship,Hostile,One-time,Facebook,Bullying
+Shut up 🙄,Friend,User,Close Friend,Friendly,Frequent,Discord,Not Bullying
+Shut up,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+You're so dumb 🤦,Classmate,User,Classmate,Friendly,Occasional,Snapchat,Not Bullying
+You're so dumb,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+Nobody likes you 💔,Friend,User,Close Friend,Empathetic,Rare,WhatsApp,Not Bullying
+Nobody likes you,Anonymous,User,Unknown,None,One-time,Twitter,Bullying
+Die,Teammate,User,Friend,Joking,Frequent,Discord,Not Bullying
+Die,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+You're worthless,Parent,User,Family,Serious criticism,Rare,SMS,Bullying
+You're worthless 😢,Friend,User,Close Friend,Supportive,Rare,WhatsApp,Not Bullying
+Kill yourself,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+Kill yourself lol,Friend,User,Close Friend,Dark humor,Rare,Discord,Not Bullying
+I hope you fail,Coworker,User,Colleague,Competitive,Rare,Slack,Bullying
+I hope you fail 😅,Friend,User,Close Friend,Friendly,Rare,WhatsApp,Not Bullying
+Get out of my life,Ex-friend,User,Former Friend,Hostile,One-time,Facebook,Bullying
+Get out of my life 😂,Friend,User,Close Friend,Playful,Rare,Instagram,Not Bullying
+You're a loser,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+You're a loser 🤪,Teammate,User,Friend,Friendly,Frequent,Discord,Not Bullying
+Stop talking,Moderator,User,Neutral,None,One-time,Discord,Not Bullying
+Stop talking,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+You're ugly,Anonymous,User,Unknown,None,One-time,Twitter,Bullying
+You're ugly 😂,Friend,User,Close Friend,Friendly,Rare,Snapchat,Not Bullying
+I'll make you pay,Ex-partner,User,Ex-relationship,Hostile,One-time,Facebook,Bullying
+I'll make you pay 😈,Girlfriend,User,Intimate,Playful,Rare,WhatsApp,Not Bullying
+Nobody cares,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+Nobody cares ❤️,Friend,User,Close Friend,Comforting,Rare,SMS,Not Bullying
+What's wrong with you?,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+What's wrong with you? 😂,Friend,User,Close Friend,Friendly,Frequent,WhatsApp,Not Bullying
+You're pathetic,Anonymous,User,Unknown,None,One-time,Instagram,Bullying
+You're pathetic 😭,Sibling,User,Family,Empathetic,Rare,SMS,Not Bullying
+I'll ruin you,Stranger,User,Unknown,None,One-time,Facebook,Bullying
+I'll ruin you 🎮,Teammate,User,Friend,Competitive joke,Frequent,Discord,Not Bullying
+You're a mistake,Parent,User,Family,Angry,Rare,SMS,Bullying
+You're a mistake 🤗,Friend,User,Close Friend,Comforting,Rare,WhatsApp,Not Bullying
+F*** you,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+F*** you 😂,Best Friend,User,Close Friend,Friendly,Frequent,WhatsApp,Not Bullying
+You deserve to suffer,Ex-friend,User,Former Friend,Hostile,Occasional,Facebook,Bullying
+You deserve to suffer 😅,Friend,User,Close Friend,Joking,Rare,Discord,Not Bullying
+I'll destroy you,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+I'll destroy you 🔥,Teammate,User,Friend,Game trash-talk,Frequent,Discord,Not Bullying
+You're so annoying,Acquaintance,User,Acquaintance,Frustrated,One-time,Facebook,Bullying
+You're so annoying 😂,Sibling,User,Family,Playful,Occasional,SMS,Not Bullying
+I wish you were dead,Anonymous,User,Unknown,None,One-time,Twitter,Bullying
+I wish you were dead 😜,Friend,User,Close Friend,Dark joke,Rare,WhatsApp,Not Bullying
+Get lost,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+Get lost 🙄,Friend,User,Close Friend,Playful,Frequent,Snapchat,Not Bullying
+You're a cancer,Stranger,User,Unknown,None,One-time,Facebook,Bullying
+You're a cancer 😭,Friend,User,Close Friend,Empathetic,Rare,WhatsApp,Not Bullying
+I'll haunt you,Ex-partner,User,Ex-relationship,Hostile,One-time,Instagram,Bullying
+I'll haunt you 👻,Girlfriend,User,Intimate,Playful,Rare,SMS,Not Bullying
+You're useless,Teacher,User,Student,Disappointed,One-time,Email,Bullying
+You're useless 😴,Friend,User,Close Friend,Joking,Rare,Discord,Not Bullying
+Why were you born?,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+Why were you born? 😂,Sibling,User,Family,Sarcastic,Rare,SMS,Not Bullying
+I'm going to make your life hell,Anonymous,User,Unknown,None,One-time,Instagram,Bullying
+I'm going to make your life hell 😈,Best Friend,User,Close Friend,Playful,Rare,WhatsApp,Not Bullying
+You're worthless trash,Stranger,User,Unknown,None,One-time,Facebook,Bullying
+You're worthless trash 😂,Friend,User,Close Friend,Friendly,Rare,Snapchat,Not Bullying
+I'll get you,Ex-friend,User,Former Friend,Threatening,One-time,Twitter,Bullying
+I'll get you 😜,Teammate,User,Friend,Game banter,Frequent,Discord,Not Bullying
+Nobody wants you here,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+Nobody wants you here 🙃,Friend,User,Close Friend,Joking,Rare,WhatsApp,Not Bullying
+You're a disappointment,Parent,User,Family,Serious criticism,Occasional,SMS,Bullying
+You're a disappointment 🤦,Sibling,User,Family,Playful,Rare,Discord,Not Bullying
+I hope you get hurt,Anonymous,User,Unknown,None,One-time,Twitter,Bullying
+I hope you get hurt 😂,Friend,User,Close Friend,Dark joke,Rare,WhatsApp,Not Bullying
+Shut your mouth,Stranger,User,Unknown,None,One-time,Facebook,Bullying
+Shut your mouth 😘,Girlfriend,User,Intimate,Playful,Rare,SMS,Not Bullying
+You're a joke,Acquaintance,User,Acquaintance,Mean,One-time,Instagram,Bullying
+You're a joke 😂,Best Friend,User,Close Friend,Friendly,Frequent,WhatsApp,Not Bullying
+I'll make you cry,Ex-partner,User,Ex-relationship,Hostile,One-time,Twitter,Bullying
+I'll make you cry 😂,Friend,User,Close Friend,Joking,Rare,Discord,Not Bullying
+You're nothing,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+You're nothing 🥺,Friend,User,Close Friend,Comforting,Rare,WhatsApp,Not Bullying
+Get out of here,Stranger,User,Unknown,None,One-time,Facebook,Bullying
+Get out of here 🙄,Sibling,User,Family,Playful,Occasional,SMS,Not Bullying
+I'm going to end you,Anonymous,User,Unknown,None,One-time,Twitter,Bullying
+I'm going to end you 🎮,Teammate,User,Friend,Game trash-talk,Frequent,Discord,Not Bullying
+You're so stupid,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+You're so stupid 🤣,Friend,User,Close Friend,Friendly,Frequent,WhatsApp,Not Bullying
+I hate your guts,Ex-friend,User,Former Friend,Hostile,Occasional,Facebook,Bullying
+I hate your guts 😂,Best Friend,User,Close Friend,Playful,Rare,Snapchat,Not Bullying
+Kill yourself already,Anonymous,User,Unknown,None,One-time,Twitter,Bullying
+Kill yourself already 😜,Friend,User,Close Friend,Dark humor,Rare,Discord,Not Bullying
+You're a freak,Stranger,User,Unknown,None,One-time,Instagram,Bullying
+You're a freak 🤪,Sibling,User,Family,Playful,Rare,SMS,Not Bullying
+I'll make sure you regret it,Ex-partner,User,Ex-relationship,Hostile,One-time,Facebook,Bullying
+I'll make sure you regret it 😉,Girlfriend,User,Intimate,Playful,Rare,WhatsApp,Not Bullying
+You're garbage,Stranger,User,Unknown,None,One-time,Twitter,Bullying
+You're garbage 😂,Friend,User,Close Friend,Friendly,Rare,Instagram,Not Bullying
+I wish you'd disappear,Anonymous,User,Unknown,None,One-time,Instagram,Bullying
+I wish you'd disappear 😂,Friend,User,Close Friend,Joking,Rare,WhatsApp,Not Bullying
+You're a waste of space,Stranger,User,Unknown,None,One-time,Facebook,Bullying
+You're a waste of space 😴,Teammate,User,Friend,Friendly banter,Rare,Discord,Not Bullying
