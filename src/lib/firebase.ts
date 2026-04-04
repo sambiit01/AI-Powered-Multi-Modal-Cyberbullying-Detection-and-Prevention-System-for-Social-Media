@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -25,3 +25,30 @@ if (!getApps().length) {
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+/**
+ * Fetches or creates a relationship document between two users.
+ * Generates a unique ID by sorting the UIDs alphabetically.
+ */
+export async function getOrCreateRelationship(senderId: string, receiverId: string) {
+  console.log(`[DATABASE] Fetching relationship for: ${senderId} <-> ${receiverId}`);
+  const relId = [senderId, receiverId].sort().join('_');
+  const relRef = doc(db, "relationships", relId);
+  const relDoc = await getDoc(relRef);
+
+  if (relDoc.exists()) {
+    console.log(`[DATABASE] Relationship found:`, relDoc.data());
+    return relDoc.data();
+  } else {
+    console.log(`[DATABASE] No relationship found. Creating default: Stranger/None`);
+    const initialData = {
+      interactionCount: 0,
+      relationshipType: 'Stranger',
+      historyType: 'None',
+      participants: [senderId, receiverId],
+      lastInteraction: new Date().toISOString()
+    };
+    await setDoc(relRef, initialData);
+    return initialData;
+  }
+}
