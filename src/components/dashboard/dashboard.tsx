@@ -39,8 +39,6 @@ export default function Dashboard() {
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    // If we're logged in but have no profile, we can't fetch activities safely.
-    // However, we should stop the loading spinner so the user sees an error or fallback.
     if (!user) {
         console.log("[Dashboard] No user authenticated.");
         return;
@@ -48,7 +46,6 @@ export default function Dashboard() {
 
     if (!userProfile) {
       console.log("[Dashboard] Waiting for auth profile data...");
-      // Set a timeout to stop loading if profile fetching hangs
       const timeout = setTimeout(() => {
           if (loading) {
               console.error("[Dashboard] Profile fetch timed out.");
@@ -130,7 +127,7 @@ export default function Dashboard() {
       case "overview": return <Overview activities={activities} />;
       case "moderation": return <Moderation addActivity={addActivity} />;
       case "user-analysis": return <UserAnalysis addActivity={addActivity} />;
-      case "reporting": return <ReportingTool addActivity={addActivity} />;
+      case "reporting": return <ReportingTool addActivity={addActivity} activities={activities} />;
       case "settings": return <Settings />;
       default: return <Overview activities={activities} />;
     }
