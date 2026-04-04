@@ -1,7 +1,8 @@
+
 "use client";
 
 import * as React from "react";
-import { collection, addDoc, onSnapshot, query, where, Timestamp, orderBy } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -48,10 +49,11 @@ export default function Dashboard() {
 
     const activitiesRef = collection(db, "activities");
     
-    // Admins see EVERYTHING, regular users see only their own data
+    // We remove the server-side orderBy to avoid the requirement for a composite index
+    // Firestore requires a composite index when combining equality filters (where) with inequality/ordering.
     const q = isAdmin 
-      ? query(activitiesRef, orderBy("date", "desc"))
-      : query(activitiesRef, where("userId", "==", user.uid), orderBy("date", "desc"));
+      ? query(activitiesRef)
+      : query(activitiesRef, where("userId", "==", user.uid));
     
     const unsubscribe = onSnapshot(q, 
       (querySnapshot) => {
@@ -75,6 +77,12 @@ export default function Dashboard() {
             date: dateStr,
           } as Activity);
         });
+
+        // Client-side sorting: Sort by date descending (newest first)
+        activitiesData.sort((a, b) => {
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+
         setActivities(activitiesData);
         setLoading(false);
       }, 
