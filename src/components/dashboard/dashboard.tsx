@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -15,7 +14,8 @@ import Moderation from "@/components/dashboard/moderation";
 import UserAnalysis from "@/components/dashboard/user-analysis";
 import ReportingTool from "@/components/dashboard/reporting-tool";
 import Settings from "@/components/dashboard/settings";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export type Activity = {
   id: string;
@@ -33,31 +33,41 @@ export type Activity = {
 };
 
 export default function Dashboard() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, signOut } = useAuth();
   const [activeView, setActiveView] = React.useState<View>("overview");
   const [activities, setActivities] = React.useState<Activity[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (!user || !userProfile) {
-      console.log("[Dashboard] Waiting for auth profile...");
-      return;
+    // If we're logged in but have no profile, we can't fetch activities safely.
+    // However, we should stop the loading spinner so the user sees an error or fallback.
+    if (!user) {
+        console.log("[Dashboard] No user authenticated.");
+        return;
+    }
+
+    if (!userProfile) {
+      console.log("[Dashboard] Waiting for auth profile data...");
+      // Set a timeout to stop loading if profile fetching hangs
+      const timeout = setTimeout(() => {
+          if (loading) {
+              console.error("[Dashboard] Profile fetch timed out.");
+              setLoading(false);
+          }
+      }, 5000);
+      return () => clearTimeout(timeout);
     }
 
     const isAdmin = userProfile.role === 'superuser';
-    console.log(`[Dashboard] Initializing data for ${isAdmin ? 'ADMIN' : 'USER'}: ${user.uid}`);
+    console.log(`[Dashboard] Fetching data for ${isAdmin ? 'ADMIN' : 'USER'}: ${user.uid}`);
 
     const activitiesRef = collection(db, "activities");
-    
-    // We remove the server-side orderBy to avoid the requirement for a composite index
-    // Firestore requires a composite index when combining equality filters (where) with inequality/ordering.
     const q = isAdmin 
       ? query(activitiesRef)
       : query(activitiesRef, where("userId", "==", user.uid));
     
     const unsubscribe = onSnapshot(q, 
       (querySnapshot) => {
-        console.log(`[Dashboard] ${isAdmin ? 'Admin' : 'User'} update: ${querySnapshot.size} records found.`);
         const activitiesData: Activity[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
@@ -78,11 +88,7 @@ export default function Dashboard() {
           } as Activity);
         });
 
-        // Client-side sorting: Sort by date descending (newest first)
-        activitiesData.sort((a, b) => {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
-        });
-
+        activitiesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setActivities(activitiesData);
         setLoading(false);
       }, 
@@ -98,15 +104,11 @@ export default function Dashboard() {
       }
     );
 
-    return () => {
-      console.log("[Dashboard] Cleaning up data listeners.");
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [user, userProfile]);
 
   const addActivity = (activity: Omit<Activity, "id" | "date" | "userId">) => {
      if (!user) return;
-    console.log("[Dashboard] Creating new activity log...");
     
     const activityData = {
       ...activity,
@@ -125,25 +127,34 @@ export default function Dashboard() {
 
   const renderView = () => {
     switch (activeView) {
-      case "overview":
-        return <Overview activities={activities} />;
-      case "moderation":
-        return <Moderation addActivity={addActivity} />;
-      case "user-analysis":
-        return <UserAnalysis addActivity={addActivity} />;
-      case "reporting":
-        return <ReportingTool addActivity={addActivity} />;
-      case "settings":
-        return <Settings />;
-      default:
-        return <Overview activities={activities} />;
+      case "overview": return <Overview activities={activities} />;
+      case "moderation": return <Moderation addActivity={addActivity} />;
+      case "user-analysis": return <UserAnalysis addActivity={addActivity} />;
+      case "reporting": return <ReportingTool addActivity={addActivity} />;
+      case "settings": return <Settings />;
+      default: return <Overview activities={activities} />;
     }
   };
 
   if (loading) {
     return (
-        <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex h-screen w-full flex-col items-center justify-center gap-4">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
+        </div>
+    );
+  }
+
+  if (user && !userProfile) {
+    return (
+        <div className="flex h-screen w-full flex-col items-center justify-center gap-4 p-4 text-center">
+            <AlertTriangle className="h-12 w-12 text-destructive" />
+            <h1 className="text-xl font-bold">Profile Not Found</h1>
+            <p className="max-w-md text-muted-foreground">
+                Your account is authenticated, but we couldn't find your profile in the database. 
+                Please try logging out and back in, or contact support.
+            </p>
+            <Button variant="outline" onClick={signOut}>Log Out</Button>
         </div>
     );
   }
