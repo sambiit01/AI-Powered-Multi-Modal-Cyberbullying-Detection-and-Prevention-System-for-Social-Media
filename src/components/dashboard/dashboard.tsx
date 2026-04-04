@@ -20,7 +20,7 @@ export type Activity = {
   id: string;
   type: "Content" | "User" | "Report";
   details: string;
-  status: "Flagged" | "Pending" | "Monitored" | "Action Taken";
+  status: "Flagged" | "Pending" | "Safe" | "Action Taken";
   date: string; // ISO string
   isCyberbullying?: boolean;
   isHighRisk?: boolean;

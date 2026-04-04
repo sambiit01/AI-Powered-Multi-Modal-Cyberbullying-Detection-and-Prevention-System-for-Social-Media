@@ -58,7 +58,7 @@ import { Info, CheckCircle2, XCircle, FileText, ListChecks, Eye } from "lucide-r
 import { useToast } from "@/hooks/use-toast";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { format, parseISO } from "date-fns";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -111,6 +111,9 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
   }
 
   const handleCorrectLabel = async (activity: Activity, correctedLabel: string) => {
+    const isBullying = correctedLabel === "Bullying";
+    const newStatus = isBullying ? "Flagged" : "Safe";
+
     const feedbackData = {
       text: activity.originalText || activity.details,
       relationship: activity.relType || "Stranger",
@@ -122,14 +125,8 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
       uploadedAt: new Date().toISOString()
     };
 
+    // 1. Add to context examples
     addDoc(collection(db, "contextExamples"), feedbackData)
-      .then(() => {
-        toast({
-          title: "Incident Reviewed",
-          description: `Successfully labeled as ${correctedLabel}.`,
-        });
-        setSelectedActivity(null);
-      })
       .catch((err) => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({
           path: "contextExamples",
@@ -137,6 +134,25 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
           requestResourceData: feedbackData
         }));
       });
+
+    // 2. Update the actual activity status
+    const activityRef = doc(db, "activities", activity.id);
+    updateDoc(activityRef, {
+      status: newStatus,
+      isCyberbullying: isBullying
+    }).then(() => {
+      toast({
+        title: "Incident Reviewed",
+        description: `Successfully labeled as ${newStatus}. AI accuracy improved.`,
+      });
+      setSelectedActivity(null);
+    }).catch((err) => {
+      errorEmitter.emit("permission-error", new FirestorePermissionError({
+        path: `activities/${activity.id}`,
+        operation: "update",
+        requestResourceData: { status: newStatus }
+      }));
+    });
   };
 
   const ReportForm = (

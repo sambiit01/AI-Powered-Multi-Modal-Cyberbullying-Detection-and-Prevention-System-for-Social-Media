@@ -42,7 +42,7 @@ import { Button } from "@/components/ui/button";
 import { type Activity } from "./dashboard";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -65,7 +65,7 @@ export default function Overview({ activities }: OverviewProps) {
   const isAdmin = userProfile?.role === "superuser";
 
   const incidentsFlagged = activities.filter(
-    (a) => a.isCyberbullying
+    (a) => a.isCyberbullying || a.status === "Flagged"
   ).length;
   const highRiskUsers = activities.filter((a) => a.isHighRisk).length;
   const potentialVictims = activities.filter((a) => a.isPotentialVictim).length;
@@ -82,7 +82,7 @@ export default function Overview({ activities }: OverviewProps) {
     }
     
     activities.forEach((activity) => {
-      if (activity.isCyberbullying) {
+      if (activity.isCyberbullying || activity.status === "Flagged") {
         try {
           const monthKey = format(parseISO(activity.date), "yyyy-MM");
           if (months.hasOwnProperty(monthKey)) {
@@ -99,6 +99,9 @@ export default function Overview({ activities }: OverviewProps) {
   }, [activities]);
 
   const handleCorrectLabel = async (activity: Activity, correctedLabel: string) => {
+    const isBullying = correctedLabel === "Bullying";
+    const newStatus = isBullying ? "Flagged" : "Safe";
+
     const feedbackData = {
       text: activity.originalText || activity.details,
       relationship: activity.relType || "Stranger",
@@ -110,13 +113,8 @@ export default function Overview({ activities }: OverviewProps) {
       uploadedAt: new Date().toISOString()
     };
 
+    // 1. Add to context examples
     addDoc(collection(db, "contextExamples"), feedbackData)
-      .then(() => {
-        toast({
-          title: "Label Corrected",
-          description: "This activity has been re-labeled for AI training.",
-        });
-      })
       .catch((err) => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({
           path: "contextExamples",
@@ -124,6 +122,24 @@ export default function Overview({ activities }: OverviewProps) {
           requestResourceData: feedbackData
         }));
       });
+
+    // 2. Update the actual activity status
+    const activityRef = doc(db, "activities", activity.id);
+    updateDoc(activityRef, {
+      status: newStatus,
+      isCyberbullying: isBullying
+    }).then(() => {
+      toast({
+        title: "Label Corrected",
+        description: `This activity has been re-labeled as ${newStatus} for AI training.`,
+      });
+    }).catch((err) => {
+      errorEmitter.emit("permission-error", new FirestorePermissionError({
+        path: `activities/${activity.id}`,
+        operation: "update",
+        requestResourceData: { status: newStatus }
+      }));
+    });
   };
 
   return (

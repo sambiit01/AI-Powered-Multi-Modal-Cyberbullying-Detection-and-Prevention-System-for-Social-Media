@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -148,7 +147,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
         addActivity({
           type: "Content",
           details: `Analysis: ${text.substring(0, 30)}...`,
-          status: textResult.isCyberbullying ? "Flagged" : "Monitored",
+          status: textResult.isCyberbullying ? "Flagged" : "Safe",
           isCyberbullying: textResult.isCyberbullying,
           reasoning: textResult.reasoning,
           originalText: text,
@@ -178,7 +177,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
           addActivity({
             type: "Content",
             details: `Media: ${extractedText.substring(0, 30)}...`,
-            status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
+            status: mediaResult.isCyberbullying ? "Flagged" : "Safe",
             isCyberbullying: mediaResult.isCyberbullying,
             reasoning: mediaResult.reasoning,
             originalText: extractedText,
@@ -323,7 +322,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                     <h3 className="font-semibold text-sm">AI Determination</h3>
                   </div>
                   <Badge variant={(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "destructive" : "default"}>
-                    {(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "Cyberbullying" : "Safe"}
+                    {(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "Flagged" : "Safe"}
                   </Badge>
                 </div>
                 <p className="text-sm mb-6 leading-relaxed text-muted-foreground italic">
