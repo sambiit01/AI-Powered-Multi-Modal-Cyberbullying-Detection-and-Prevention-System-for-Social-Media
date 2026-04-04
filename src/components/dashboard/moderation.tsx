@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -73,9 +74,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
   async function fetchContextData(senderId: string, receiverId: string) {
     const relData = await getOrCreateRelationship(senderId, receiverId);
+    
+    // These are explicitly fetched from the Relationship collection
     const relType = relData.relationshipType || 'Stranger';
     const histType = relData.historyType || 'Neutral';
-    const freq = relData.interactionFrequency || 'Normal';
+    const freq = relData.interactionFrequency || 'Occasional';
     const isBursting = !!relData.isBursting;
 
     const examplesRef = collection(db, 'contextExamples');
@@ -211,7 +214,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
       relationship: relType,
       interaction_history: histType,
       interaction_frequency: freq,
-      history: "Admin Corrected",
       label: correctedLabel,
       sourceFile: "Manual Correction",
       uploadedAt: new Date().toISOString()
@@ -236,7 +238,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
         <CardHeader>
           <CardTitle>Behavioral Moderation</CardTitle>
           <CardDescription>
-            AI analysis powered by relationship leveling and burstiness detection.
+            AI analysis powered by relationship leveling and frequency detection.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -317,6 +319,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">{result.relType}</Badge>
+                    <Badge variant="outline" className="text-xs">{result.freq}</Badge>
                     <h3 className="font-semibold text-sm">AI Determination</h3>
                   </div>
                   <Badge variant={(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "destructive" : "default"}>
@@ -337,7 +340,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                         variant="outline" 
                         size="sm" 
                         className="flex-1 hover:bg-destructive/10"
-                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Normal", "Bullying")}
+                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Occasional", "Bullying")}
                       >
                         <XCircle className="mr-2 h-4 w-4 text-destructive" />
                         Label as Bullying
@@ -346,7 +349,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                         variant="outline" 
                         size="sm" 
                         className="flex-1 hover:bg-primary/10"
-                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Normal", "Not Bullying")}
+                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Occasional", "Not Bullying")}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
                         Label as Safe

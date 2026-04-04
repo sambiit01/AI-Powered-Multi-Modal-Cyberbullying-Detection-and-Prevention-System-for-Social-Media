@@ -39,6 +39,21 @@ function calculateRelationshipLevel(totalCount: number, isBidirectional: boolean
 }
 
 /**
+ * Calculates interaction frequency based on timing and volume.
+ */
+function calculateInteractionFrequency(count: number, lastInteractionIso: string): string {
+  if (count <= 1) return 'One-time';
+  
+  const lastDate = new Date(lastInteractionIso).getTime();
+  const now = Date.now();
+  const diffHours = (now - lastDate) / (1000 * 60 * 60);
+
+  // If talked within 48 hours and has a decent history
+  if (diffHours < 48 && count > 5) return 'Often';
+  return 'Occasional';
+}
+
+/**
  * Fetches or creates a relationship document between two users.
  * Now handles behavioral inference metrics.
  */
@@ -64,26 +79,28 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
         const tenMessagesAgo = senderTimestamps[senderTimestamps.length - 10];
         const twoMinutesAgo = now - 120000;
         
-        // Sender sent 10 in 2 mins
         const sentTenInTwoMins = tenMessagesAgo > twoMinutesAgo;
-        // Receiver sent 0 in 2 mins
         const receiverInactive = !receiverTimestamps.some(ts => ts > twoMinutesAgo);
         
         isBursting = sentTenInTwoMins && receiverInactive;
       }
 
+      // Return persisted frequency or calculate on the fly
+      const frequency = data.interactionFrequency || calculateInteractionFrequency(data.interactionCount || 0, data.lastInteraction || new Date().toISOString());
+
       return {
         ...data,
         isBursting,
-        interactionFrequency: isBursting ? 'High (Bursting)' : 'Normal'
+        interactionFrequency: isBursting ? 'High (Bursting)' : frequency
       };
     } else {
-      console.log(`[DATABASE] No relationship found. Creating default: Stranger/None`);
+      console.log(`[DATABASE] No relationship found. Creating default: Stranger/One-time`);
       const initialData = {
         interactionCount: 0,
         userCounts: { [senderId]: 0, [receiverId]: 0 },
         relationshipType: 'Stranger',
         historyType: 'Neutral',
+        interactionFrequency: 'One-time',
         rollingSentimentScore: 0.5,
         messageTimestamps: { [senderId]: [], [receiverId]: [] },
         participants: [senderId, receiverId],
@@ -98,7 +115,7 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
         }));
       });
 
-      return { ...initialData, isBursting: false, interactionFrequency: 'Normal' };
+      return { ...initialData, isBursting: false };
     }
   } catch (error: any) {
     if (error.code === 'permission-denied') {
@@ -144,6 +161,8 @@ export async function updateRelationshipBehavior(senderId: string, receiverId: s
 
     const newLevel = calculateRelationshipLevel(totalCount, isBidirectional);
     const newHistory = sentiment > 0.8 ? 'Friendly' : 'Neutral';
+    const newLastInteraction = new Date().toISOString();
+    const newFrequency = calculateInteractionFrequency(totalCount, newLastInteraction);
 
     await updateDoc(relRef, {
       interactionCount: increment(1),
@@ -152,7 +171,8 @@ export async function updateRelationshipBehavior(senderId: string, receiverId: s
       rollingSentimentScore: sentiment,
       relationshipType: newLevel,
       historyType: newHistory,
-      lastInteraction: new Date().toISOString()
+      interactionFrequency: newFrequency,
+      lastInteraction: newLastInteraction
     });
   } catch (err) {
     console.error("[DATABASE] Error updating behavior metrics:", err);
