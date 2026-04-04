@@ -28,6 +28,8 @@ export type Activity = {
   reasoning?: string;
   originalText?: string;
   relType?: string;
+  histType?: string;
+  freq?: string;
   userId: string;
 };
 

@@ -114,6 +114,8 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
     const feedbackData = {
       text: activity.originalText || activity.details,
       relationship: activity.relType || "Stranger",
+      interaction_history: activity.histType || "Neutral",
+      interaction_frequency: activity.freq || "Normal",
       history: "Admin Management Review",
       label: correctedLabel,
       sourceFile: "Admin Reporting Console",
@@ -314,7 +316,11 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
                 </div>
                 <div>
                   <p className="text-muted-foreground font-semibold">Relationship Context</p>
-                  <Badge variant="outline">{selectedActivity.relType || "Unknown"}</Badge>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">{selectedActivity.relType || "Unknown"}</Badge>
+                    <Badge variant="outline" className="bg-muted">{selectedActivity.histType || "Neutral"}</Badge>
+                    <Badge variant="outline" className="bg-muted">{selectedActivity.freq || "Normal"}</Badge>
+                  </div>
                 </div>
               </div>
 

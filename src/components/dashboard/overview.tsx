@@ -98,10 +98,12 @@ export default function Overview({ activities }: OverviewProps) {
     }));
   }, [activities]);
 
-  const handleCorrectLabel = async (originalText: string, relType: string, correctedLabel: string) => {
+  const handleCorrectLabel = async (activity: Activity, correctedLabel: string) => {
     const feedbackData = {
-      text: originalText,
-      relationship: relType || "Stranger",
+      text: activity.originalText || activity.details,
+      relationship: activity.relType || "Stranger",
+      interaction_history: activity.histType || "Neutral",
+      interaction_frequency: activity.freq || "Normal",
       history: "Admin Corrected from Log",
       label: correctedLabel,
       sourceFile: "Activity Feed Correction",
@@ -270,7 +272,7 @@ export default function Overview({ activities }: OverviewProps) {
                                     variant="ghost" 
                                     size="icon" 
                                     className="h-8 w-8"
-                                    onClick={() => handleCorrectLabel(activity.originalText || activity.details, activity.relType || "Stranger", "Bullying")}
+                                    onClick={() => handleCorrectLabel(activity, "Bullying")}
                                   >
                                     <XCircle className="h-4 w-4 text-destructive" />
                                   </Button>
@@ -283,7 +285,7 @@ export default function Overview({ activities }: OverviewProps) {
                                     variant="ghost" 
                                     size="icon" 
                                     className="h-8 w-8"
-                                    onClick={() => handleCorrectLabel(activity.originalText || activity.details, activity.relType || "Stranger", "Not Bullying")}
+                                    onClick={() => handleCorrectLabel(activity, "Not Bullying")}
                                   >
                                     <CheckCircle2 className="h-4 w-4 text-primary" />
                                   </Button>

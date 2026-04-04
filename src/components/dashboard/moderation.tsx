@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -43,6 +42,8 @@ type AnalysisResult = {
   extractedText?: string;
   originalText?: string;
   relType?: string;
+  histType?: string;
+  freq?: string;
   isBursting?: boolean;
 };
 
@@ -148,10 +149,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
           isCyberbullying: textResult.isCyberbullying,
           reasoning: textResult.reasoning,
           originalText: text,
-          relType: ctx.relType
+          relType: ctx.relType,
+          histType: ctx.histType,
+          freq: ctx.freq
         });
 
-        // Behavioral Loop: Update relationship metrics
         await updateRelationshipBehavior(user.uid, receiverId, !textResult.isCyberbullying);
       }
 
@@ -177,7 +179,9 @@ export default function Moderation({ addActivity }: ModerationProps) {
             isCyberbullying: mediaResult.isCyberbullying,
             reasoning: mediaResult.reasoning,
             originalText: extractedText,
-            relType: ctx.relType
+            relType: ctx.relType,
+            histType: ctx.histType,
+            freq: ctx.freq
           });
 
           await updateRelationshipBehavior(user.uid, receiverId, !mediaResult.isCyberbullying);
@@ -190,6 +194,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
         extractedText, 
         originalText: text,
         relType: ctx.relType,
+        histType: ctx.histType,
+        freq: ctx.freq,
         isBursting: ctx.isBursting
       });
     } catch (e: any) {
@@ -199,10 +205,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
   }
 
-  const handleCorrectLabel = async (originalText: string, relType: string, correctedLabel: string) => {
+  const handleCorrectLabel = async (originalText: string, relType: string, histType: string, freq: string, correctedLabel: string) => {
     const feedbackData = {
       text: originalText,
       relationship: relType,
+      interaction_history: histType,
+      interaction_frequency: freq,
       history: "Admin Corrected",
       label: correctedLabel,
       sourceFile: "Manual Correction",
@@ -329,7 +337,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                         variant="outline" 
                         size="sm" 
                         className="flex-1 hover:bg-destructive/10"
-                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Bullying")}
+                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Normal", "Bullying")}
                       >
                         <XCircle className="mr-2 h-4 w-4 text-destructive" />
                         Label as Bullying
@@ -338,7 +346,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
                         variant="outline" 
                         size="sm" 
                         className="flex-1 hover:bg-primary/10"
-                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Not Bullying")}
+                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Normal", "Not Bullying")}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
                         Label as Safe
