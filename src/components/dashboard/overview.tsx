@@ -23,14 +23,22 @@ import {
   ShieldAlert,
   Users,
   MessageSquareWarning,
+  Info,
 } from "lucide-react";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { type Activity } from "./dashboard";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
+import { useAuth } from "@/hooks/use-auth";
 
 const chartConfig = {
   incidents: {
@@ -44,6 +52,9 @@ type OverviewProps = {
 };
 
 export default function Overview({ activities }: OverviewProps) {
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === "superuser";
+
   const incidentsFlagged = activities.filter(
     (a) => a.isCyberbullying
   ).length;
@@ -64,10 +75,12 @@ export default function Overview({ activities }: OverviewProps) {
     
     activities.forEach((activity) => {
       if (activity.isCyberbullying) {
-        const monthKey = format(new Date(activity.date), "yyyy-MM");
-        if (months.hasOwnProperty(monthKey)) {
-          months[monthKey]++;
-        }
+        try {
+          const monthKey = format(parseISO(activity.date), "yyyy-MM");
+          if (months.hasOwnProperty(monthKey)) {
+            months[monthKey]++;
+          }
+        } catch (e) {}
       }
     });
 
@@ -122,7 +135,7 @@ export default function Overview({ activities }: OverviewProps) {
           <CardHeader>
             <CardTitle>Incident Trends</CardTitle>
             <CardDescription>
-              Incidents detected over the last 6 months.
+              {isAdmin ? "Global platform incidents" : "Your detected incidents"} over the last 6 months.
             </CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
@@ -161,7 +174,7 @@ export default function Overview({ activities }: OverviewProps) {
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
             <CardDescription>
-              A log of recent automated detections and manual reports.
+              {isAdmin ? "Unified log of all automated detections." : "A log of your automated detections."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -175,15 +188,30 @@ export default function Overview({ activities }: OverviewProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activities.slice(0, 5).map((activity) => (
+                  {activities.slice(0, 10).map((activity) => (
                     <TableRow key={activity.id}>
                       <TableCell>
                         <Badge variant="outline">{activity.type}</Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{activity.details}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {format(new Date(activity.date), "MMMM d, yyyy")}
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium truncate max-w-[150px]">{activity.details}</div>
+                          {activity.reasoning && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Info className="h-4 w-4 text-muted-foreground" />
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="text-xs">{activity.reasoning}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {format(parseISO(activity.date), "MMM d, h:mm a")}
+                          {isAdmin && activity.userId && ` • ${activity.userId.substring(0, 6)}`}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -205,8 +233,8 @@ export default function Overview({ activities }: OverviewProps) {
                 </TableBody>
               </Table>
             ) : (
-              <div className="text-center text-muted-foreground py-8">
-                No activity yet. Start by analyzing content or users.
+              <div className="text-center text-muted-foreground py-8 text-sm">
+                No activity yet. Analyze content to see results.
               </div>
             )}
           </CardContent>

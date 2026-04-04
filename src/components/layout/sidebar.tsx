@@ -16,6 +16,7 @@ import {
   Settings,
 } from "lucide-react";
 import { ShieldIcon } from "../icons/shield-icon";
+import { useAuth } from "@/hooks/use-auth";
 
 export type View =
   | "overview"
@@ -29,14 +30,19 @@ type AppSidebarProps = {
   setActiveView: (view: View) => void;
 };
 
-const navItems = [
-  { id: "overview", label: "Overview", icon: LayoutGrid },
-  { id: "moderation", label: "Moderation", icon: MessageSquareWarning },
-  { id: "user-analysis", label: "User Analysis", icon: UsersRound },
-  { id: "reporting", label: "Reporting", icon: FilePlus2 },
-];
-
 export function AppSidebar({ activeView, setActiveView }: AppSidebarProps) {
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === "superuser";
+
+  const navItems = [
+    { id: "overview", label: "Overview", icon: LayoutGrid, adminOnly: false },
+    { id: "moderation", label: "Moderation", icon: MessageSquareWarning, adminOnly: false },
+    { id: "user-analysis", label: "User Analysis", icon: UsersRound, adminOnly: true },
+    { id: "reporting", label: "Reporting", icon: FilePlus2, adminOnly: false },
+  ];
+
+  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
+
   return (
     <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
       <TooltipProvider>
@@ -49,7 +55,7 @@ export function AppSidebar({ activeView, setActiveView }: AppSidebarProps) {
             <ShieldIcon className="h-5 w-5 transition-all group-hover:scale-110" />
             <span className="sr-only">ShieldAI</span>
           </Link>
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Tooltip key={item.id}>
               <TooltipTrigger asChild>
                 <Link
@@ -69,25 +75,27 @@ export function AppSidebar({ activeView, setActiveView }: AppSidebarProps) {
             </Tooltip>
           ))}
         </nav>
-        <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                href="#"
-                className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors md:h-8 md:w-8 ${
-                  activeView === "settings"
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveView("settings")}
-              >
-                <Settings className="h-5 w-5" />
-                <span className="sr-only">Settings</span>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Settings</TooltipContent>
-          </Tooltip>
-        </nav>
+        {isAdmin && (
+          <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="#"
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors md:h-8 md:w-8 ${
+                    activeView === "settings"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setActiveView("settings")}
+                >
+                  <Settings className="h-5 w-5" />
+                  <span className="sr-only">Settings</span>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Settings</TooltipContent>
+            </Tooltip>
+          </nav>
+        )}
       </TooltipProvider>
     </aside>
   );

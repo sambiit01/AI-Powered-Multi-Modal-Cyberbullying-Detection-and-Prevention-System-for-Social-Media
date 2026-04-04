@@ -32,7 +32,7 @@ import { FirestorePermissionError } from "@/firebase/errors";
 import { useToast } from "@/hooks/use-toast";
 
 type ModerationProps = {
-  addActivity: (activity: Omit<Activity, "id" | "date">) => void;
+  addActivity: (activity: Omit<Activity, "id" | "date" | "userId">) => void;
 };
 
 type AnalysisResult = {
@@ -66,15 +66,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
   };
 
   async function fetchContextData(senderId: string, receiverId: string) {
-    console.log("[CLIENT] STEP 3: FETCHING CONTEXT DATA (Relationship & Examples)");
-    
-    // 1. Get Relationship Metadata
+    console.log("[CLIENT] FETCHING CONTEXT DATA");
     const relationship = await getOrCreateRelationship(senderId, receiverId);
     const relType = (relationship.relationshipType as string) || 'Stranger';
     const histType = (relationship.historyType as string) || 'None';
 
-    // 2. Fetch Relevant Examples
-    console.log(`[CLIENT] Querying reference examples for: ${relType}`);
     const examplesRef = collection(db, 'contextExamples');
     const q = query(examplesRef, where('relationship', '==', relType), limit(3));
     
@@ -94,7 +90,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
       throw err;
     }
 
-    // 3. Fetch Global Admin Settings
     let sensitivityThreshold = 85;
     try {
       const settingsSnap = await getDoc(doc(db, "adminSettings", "global"));
@@ -103,7 +98,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
     } catch (err) {}
 
-    console.log(`[CLIENT] Found ${examples.length} reference examples. Threshold: ${sensitivityThreshold}%`);
     return { relType, histType, examples, sensitivityThreshold };
   }
 
@@ -119,13 +113,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
     const file = (formData.get("media") as File) ?? null;
 
     if (!user) {
-      setError("You must be logged in to perform analysis.");
-      setIsLoading(false);
-      return;
-    }
-
-    if (!text && (!file || file.size === 0)) {
-      setError("Please provide text, an image, or a video to analyze.");
+      setError("You must be logged in.");
       setIsLoading(false);
       return;
     }
@@ -138,7 +126,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
       let extractedText: string | undefined;
 
       if (text) {
-        console.log("[CLIENT] STEP 4A: STARTING TEXT FLOW...");
         textResult = await detectCyberbullyingFromText({ 
           text, 
           relationshipType: context.relType,
@@ -152,14 +139,14 @@ export default function Moderation({ addActivity }: ModerationProps) {
           details: `Text Analysis: ${text.substring(0, 30)}...`,
           status: textResult.isCyberbullying ? "Flagged" : "Monitored",
           isCyberbullying: textResult.isCyberbullying,
+          reasoning: textResult.reasoning,
+          originalText: text,
+          relType: context.relType
         });
       }
 
       if (file && file.size > 0 && filePreview) {
-        console.log("[CLIENT] STEP 4B: STARTING VISION FLOW...");
-        const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
-          { dataUri: filePreview }
-        );
+        const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia({ dataUri: filePreview });
         extractedText = mediaAnalysis.text;
 
         if (extractedText) {
@@ -176,6 +163,9 @@ export default function Moderation({ addActivity }: ModerationProps) {
             details: `Media Analysis: ${extractedText.substring(0, 30)}...`,
             status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
             isCyberbullying: mediaResult.isCyberbullying,
+            reasoning: mediaResult.reasoning,
+            originalText: extractedText,
+            relType: context.relType
           });
         }
       }
@@ -188,15 +178,13 @@ export default function Moderation({ addActivity }: ModerationProps) {
         relType: context.relType
       });
     } catch (e: any) {
-      console.error("[CLIENT] ANALYSIS FAILED:", e);
-      setError(e.message || "An error occurred during analysis.");
+      setError(e.message || "An error occurred.");
     } finally {
       setIsLoading(false);
     }
   }
 
   const handleCorrectLabel = async (originalText: string, relType: string, correctedLabel: string) => {
-    console.log("[CLIENT] Feedback loop: Adding corrected example to Firestore...");
     const feedbackData = {
       text: originalText,
       relationship: relType,
@@ -209,8 +197,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
     addDoc(collection(db, "contextExamples"), feedbackData)
       .then(() => {
         toast({
-          title: "Label Corrected",
-          description: "This correction has been saved to improve future AI calls.",
+          title: "Feedback Saved",
+          description: "This correction helps improve future AI accuracy.",
         });
       })
       .catch((err) => {
@@ -222,16 +210,13 @@ export default function Moderation({ addActivity }: ModerationProps) {
       });
   };
 
-  const getBadgeVariant = (isBullying: boolean) =>
-    isBullying ? "destructive" : "default";
-
   return (
     <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
       <Card>
         <CardHeader>
-          <CardTitle>Contextual Content Moderation</CardTitle>
+          <CardTitle>Content Moderation</CardTitle>
           <CardDescription>
-            Analyze interactions with relationship history. Use the feedback loop below to correct AI mistakes and retrain the few-shot memory.
+            AI-powered analysis with relationship context.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -240,12 +225,12 @@ export default function Moderation({ addActivity }: ModerationProps) {
               <div className="grid gap-2">
                 <Label htmlFor="receiverId" className="flex items-center gap-2">
                   <User className="h-4 w-4" />
-                  Receiver User ID
+                  Receiver ID
                 </Label>
                 <Input
                   id="receiverId"
                   name="receiverId"
-                  placeholder="e.g. user_target_123"
+                  placeholder="Target User ID"
                   defaultValue="anonymous_receiver"
                   disabled={isLoading}
                 />
@@ -253,7 +238,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
             </div>
 
             <div className="grid gap-3">
-              <Label htmlFor="text">Text Content</Label>
+              <Label htmlFor="text">Text Message</Label>
               <Textarea
                 id="text"
                 name="text"
@@ -264,7 +249,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
             </div>
 
             <div className="grid gap-3">
-              <Label htmlFor="media">Image/Video Content</Label>
+              <Label htmlFor="media">Media (Optional)</Label>
               <Input
                 id="media"
                 name="media"
@@ -280,10 +265,10 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                className="w-full h-20 border-dashed"
+                className="w-full h-16 border-dashed"
               >
                 <Upload className="mr-2 h-5 w-5" />
-                Upload Media
+                {filePreview ? "Change Media" : "Upload Image or Video"}
               </Button>
               {filePreview && (
                 <div className="mt-4 border rounded-lg overflow-hidden bg-black flex justify-center">
@@ -299,7 +284,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
           <CardFooter className="border-t px-6 py-4 bg-muted/20">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Analyze with Full Context
+              Start AI Analysis
             </Button>
           </CardFooter>
         </form>
@@ -309,10 +294,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
         <Card className="border-destructive bg-destructive/5">
           <CardHeader className="flex flex-row items-center gap-3">
             <AlertCircle className="h-6 w-6 text-destructive" />
-            <div>
-              <CardTitle className="text-destructive">Error</CardTitle>
-              <CardDescription className="text-destructive/80">{error}</CardDescription>
-            </div>
+            <CardTitle className="text-destructive text-base">Analysis Error: {error}</CardTitle>
           </CardHeader>
         </Card>
       )}
@@ -320,47 +302,42 @@ export default function Moderation({ addActivity }: ModerationProps) {
       {result && (
         <Card className="animate-in fade-in slide-in-from-bottom-2">
           <CardHeader>
-            <CardTitle>AI Analysis Results</CardTitle>
-            <CardDescription>Correct AI mistakes to improve future accuracy.</CardDescription>
+            <CardTitle>AI Verification Result</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-8">
-            {(result.textResult || result.mediaResult) && (
-              <div className="space-y-6">
-                {result.textResult && (
-                  <div className="p-4 rounded-lg border bg-muted/30">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold">Text Result</h3>
-                      <Badge variant={getBadgeVariant(result.textResult.isCyberbullying)}>
-                        {result.textResult.isCyberbullying ? "Flagged" : "Clean"}
-                      </Badge>
-                    </div>
-                    <p className="text-sm mb-4 leading-relaxed">{result.textResult.reasoning}</p>
-                    
-                    <div className="flex flex-col gap-3 pt-4 border-t">
-                      <span className="text-xs font-bold uppercase text-muted-foreground">Community Feedback Loop</span>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-1"
-                          onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Bullying")}
-                        >
-                          <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                          Should be Bullying
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-1"
-                          onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Not Bullying")}
-                        >
-                          <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
-                          Should be Clean
-                        </Button>
-                      </div>
-                    </div>
+          <CardContent className="space-y-6">
+            {result.textResult && (
+              <div className="p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-sm">Analysis Summary</h3>
+                  <Badge variant={result.textResult.isCyberbullying ? "destructive" : "default"}>
+                    {result.textResult.isCyberbullying ? "Cyberbullying Detected" : "Clear"}
+                  </Badge>
+                </div>
+                <p className="text-sm mb-6 leading-relaxed text-muted-foreground">{result.textResult.reasoning}</p>
+                
+                <div className="pt-4 border-t">
+                  <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Refine AI Accuracy</p>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Bullying")}
+                    >
+                      <XCircle className="mr-2 h-4 w-4 text-destructive" />
+                      Mark as Bullying
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Not Bullying")}
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
+                      Mark as Safe
+                    </Button>
                   </div>
-                )}
+                </div>
               </div>
             )}
           </CardContent>

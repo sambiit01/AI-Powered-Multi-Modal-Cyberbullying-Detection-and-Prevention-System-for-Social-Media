@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { collection, addDoc, onSnapshot, query, where, Timestamp } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, where, Timestamp, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -25,46 +25,61 @@ export type Activity = {
   isCyberbullying?: boolean;
   isHighRisk?: boolean;
   isPotentialVictim?: boolean;
+  reasoning?: string;
+  originalText?: string;
+  relType?: string;
+  userId: string;
 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [activeView, setActiveView] = React.useState<View>("overview");
   const [activities, setActivities] = React.useState<Activity[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (!user) {
-      console.log("[Dashboard] No user found, skipping activity subscription.");
+    if (!user || !userProfile) {
+      console.log("[Dashboard] Waiting for auth profile...");
       return;
     }
 
-    console.log("[Dashboard] Setting up real-time activity subscription for user:", user.uid);
+    const isAdmin = userProfile.role === 'superuser';
+    console.log(`[Dashboard] Initializing data for ${isAdmin ? 'ADMIN' : 'USER'}: ${user.uid}`);
+
     const activitiesRef = collection(db, "activities");
-    const q = query(
-      activitiesRef,
-      where("userId", "==", user.uid)
-    );
+    
+    // Admins see EVERYTHING, regular users see only their own data
+    const q = isAdmin 
+      ? query(activitiesRef, orderBy("date", "desc"))
+      : query(activitiesRef, where("userId", "==", user.uid), orderBy("date", "desc"));
     
     const unsubscribe = onSnapshot(q, 
       (querySnapshot) => {
-        console.log("[Dashboard] Firestore update received. Activity count:", querySnapshot.size);
+        console.log(`[Dashboard] ${isAdmin ? 'Admin' : 'User'} update: ${querySnapshot.size} records found.`);
         const activitiesData: Activity[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          if (data.date && typeof data.date.toDate === 'function') {
-              activitiesData.push({
-              id: doc.id,
-              ...data,
-              date: (data.date as Timestamp).toDate().toISOString(),
-              } as Activity);
+          let dateStr = new Date().toISOString();
+          
+          if (data.date) {
+            if (typeof data.date.toDate === 'function') {
+              dateStr = (data.date as Timestamp).toDate().toISOString();
+            } else if (typeof data.date === 'string') {
+              dateStr = data.date;
+            }
           }
+
+          activitiesData.push({
+            id: doc.id,
+            ...data,
+            date: dateStr,
+          } as Activity);
         });
-        activitiesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setActivities(activitiesData);
         setLoading(false);
       }, 
       async (error: any) => {
+        console.error("[Dashboard] Snapshot error:", error);
         if (error.code === 'permission-denied') {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: 'activities',
@@ -76,18 +91,18 @@ export default function Dashboard() {
     );
 
     return () => {
-      console.log("[Dashboard] Unsubscribing from activity feed.");
+      console.log("[Dashboard] Cleaning up data listeners.");
       unsubscribe();
     };
-  }, [user]);
+  }, [user, userProfile]);
 
-  const addActivity = (activity: Omit<Activity, "id" | "date">) => {
+  const addActivity = (activity: Omit<Activity, "id" | "date" | "userId">) => {
      if (!user) return;
-    console.log("[Dashboard] Adding new activity to Firestore:", activity);
+    console.log("[Dashboard] Creating new activity log...");
     
     const activityData = {
       ...activity,
-      date: new Date(),
+      date: new Date().toISOString(),
       userId: user.uid,
     };
 
@@ -101,7 +116,6 @@ export default function Dashboard() {
   };
 
   const renderView = () => {
-    console.log("[Dashboard] Rendering view:", activeView);
     switch (activeView) {
       case "overview":
         return <Overview activities={activities} />;

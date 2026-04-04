@@ -20,15 +20,11 @@ import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { ShieldIcon } from "@/components/icons/shield-icon";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-const SUPERUSER_EMAIL = "sambitbhoumik01@gmail.com";
+const ADMIN_EMAILS = [
+  "sambitbhoumik01@gmail.com",
+  "pauladitya2017@gmail.com"
+];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -49,18 +45,19 @@ export default function SignupPage() {
       );
       const user = userCredential.user;
       
-      const role = email === SUPERUSER_EMAIL ? "superuser" : "user";
+      const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? "superuser" : "user";
 
-      // Store user role in Firestore
+      console.log(`[SIGNUP] Creating user with role: ${role}`);
+
       await setDoc(doc(db, "users", user.uid), {
         email: user.email,
         role: role,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
       });
 
       toast({
         title: "Account Created",
-        description: "You have been successfully signed up.",
+        description: `Successfully signed up as ${role}.`,
       });
       router.push("/");
     } catch (error: any) {
