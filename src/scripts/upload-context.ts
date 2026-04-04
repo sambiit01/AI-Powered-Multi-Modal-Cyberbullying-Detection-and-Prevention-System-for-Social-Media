@@ -21,7 +21,7 @@ const db = getFirestore(app);
 
 async function uploadCSVData() {
   // List of files to process. We'll check for all three versions.
-  const files = ['bull.csv', 'bull2.csv', 'bull3.csv'];
+  const files = [ 'bull3.csv'];
   const docsDir = path.join(process.cwd(), 'docs');
 
   console.log('--------------------------------------------------');
@@ -72,9 +72,10 @@ async function uploadCSVData() {
         };
 
         const data = {
-          text: findValue('text'),
-          relationship: findValue('relationship'),
-          history: findValue('history'),
+          text: findValue('Text'),
+          relationship_level: findValue('Relationship_Level'),
+          interaction_history: findValue('Interaction_History'),
+          interaction_frequency:findValue('Interaction_Frequency'),
           label: findValue('label'),
           sourceFile: fileName,
           uploadedAt: new Date().toISOString()

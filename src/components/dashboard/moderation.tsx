@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -13,9 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, AlertCircle, Upload, User, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, AlertCircle, Upload, User, CheckCircle2, XCircle, Info } from "lucide-react";
 import {
-  detectCyberbullyingFromText,
+  detectCyberbullying,
   DetectCyberbullyingFromTextOutput,
 } from "@/ai/flows/detect-cyberbullying-from-text";
 import {
@@ -25,11 +26,12 @@ import {
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { getOrCreateRelationship, db } from "@/lib/firebase";
+import { getOrCreateRelationship, db, updateRelationshipBehavior } from "@/lib/firebase";
 import { collection, query, where, limit, getDocs, doc, getDoc, addDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { useToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date" | "userId">) => void;
@@ -41,6 +43,7 @@ type AnalysisResult = {
   extractedText?: string;
   originalText?: string;
   relType?: string;
+  isBursting?: boolean;
 };
 
 export default function Moderation({ addActivity }: ModerationProps) {
@@ -68,10 +71,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
   };
 
   async function fetchContextData(senderId: string, receiverId: string) {
-    console.log("[CLIENT] FETCHING CONTEXT DATA");
-    const relationship = await getOrCreateRelationship(senderId, receiverId);
-    const relType = (relationship.relationshipType as string) || 'Stranger';
-    const histType = (relationship.historyType as string) || 'None';
+    const relData = await getOrCreateRelationship(senderId, receiverId);
+    const relType = relData.relationshipType || 'Stranger';
+    const histType = relData.historyType || 'Neutral';
+    const freq = relData.interactionFrequency || 'Normal';
+    const isBursting = !!relData.isBursting;
 
     const examplesRef = collection(db, 'contextExamples');
     const q = query(examplesRef, where('relationship', '==', relType), limit(3));
@@ -89,7 +93,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
           operation: 'list'
         }));
       }
-      throw err;
     }
 
     let sensitivityThreshold = 85;
@@ -100,7 +103,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
     } catch (err) {}
 
-    return { relType, histType, examples, sensitivityThreshold };
+    return { relType, histType, freq, isBursting, examples, sensitivityThreshold };
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -121,30 +124,35 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     try {
-      const context = await fetchContextData(user.uid, receiverId);
+      const ctx = await fetchContextData(user.uid, receiverId);
 
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
       let mediaResult: DetectCyberbullyingFromTextOutput | undefined;
       let extractedText: string | undefined;
 
       if (text) {
-        textResult = await detectCyberbullyingFromText({ 
+        textResult = await detectCyberbullying({ 
           text, 
-          relationshipType: context.relType,
-          historyType: context.histType,
-          examples: context.examples,
-          sensitivityThreshold: context.sensitivityThreshold
+          relationshipType: ctx.relType,
+          historyType: ctx.histType,
+          interactionFrequency: ctx.freq,
+          isBursting: ctx.isBursting,
+          examples: ctx.examples,
+          sensitivityThreshold: ctx.sensitivityThreshold
         });
         
         addActivity({
           type: "Content",
-          details: `Text Analysis: ${text.substring(0, 30)}...`,
+          details: `Analysis: ${text.substring(0, 30)}...`,
           status: textResult.isCyberbullying ? "Flagged" : "Monitored",
           isCyberbullying: textResult.isCyberbullying,
           reasoning: textResult.reasoning,
           originalText: text,
-          relType: context.relType
+          relType: ctx.relType
         });
+
+        // Behavioral Loop: Update relationship metrics
+        await updateRelationshipBehavior(user.uid, receiverId, !textResult.isCyberbullying);
       }
 
       if (file && file.size > 0 && filePreview) {
@@ -152,23 +160,27 @@ export default function Moderation({ addActivity }: ModerationProps) {
         extractedText = mediaAnalysis.text;
 
         if (extractedText) {
-          mediaResult = await detectCyberbullyingFromText({
+          mediaResult = await detectCyberbullying({
             text: extractedText,
-            relationshipType: context.relType,
-            historyType: context.histType,
-            examples: context.examples,
-            sensitivityThreshold: context.sensitivityThreshold
+            relationshipType: ctx.relType,
+            historyType: ctx.histType,
+            interactionFrequency: ctx.freq,
+            isBursting: ctx.isBursting,
+            examples: ctx.examples,
+            sensitivityThreshold: ctx.sensitivityThreshold
           });
           
           addActivity({
             type: "Content",
-            details: `Media Analysis: ${extractedText.substring(0, 30)}...`,
+            details: `Media: ${extractedText.substring(0, 30)}...`,
             status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
             isCyberbullying: mediaResult.isCyberbullying,
             reasoning: mediaResult.reasoning,
             originalText: extractedText,
-            relType: context.relType
+            relType: ctx.relType
           });
+
+          await updateRelationshipBehavior(user.uid, receiverId, !mediaResult.isCyberbullying);
         }
       }
 
@@ -177,7 +189,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
         mediaResult, 
         extractedText, 
         originalText: text,
-        relType: context.relType
+        relType: ctx.relType,
+        isBursting: ctx.isBursting
       });
     } catch (e: any) {
       setError(e.message || "An error occurred.");
@@ -198,10 +211,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
 
     addDoc(collection(db, "contextExamples"), feedbackData)
       .then(() => {
-        toast({
-          title: "Feedback Saved",
-          description: "This correction helps improve future AI accuracy.",
-        });
+        toast({ title: "Feedback Saved", description: "AI accuracy improved." });
       })
       .catch((err) => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({
@@ -216,9 +226,9 @@ export default function Moderation({ addActivity }: ModerationProps) {
     <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
       <Card>
         <CardHeader>
-          <CardTitle>Content Moderation</CardTitle>
+          <CardTitle>Behavioral Moderation</CardTitle>
           <CardDescription>
-            AI-powered analysis with relationship context.
+            AI analysis powered by relationship leveling and burstiness detection.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -240,18 +250,18 @@ export default function Moderation({ addActivity }: ModerationProps) {
             </div>
 
             <div className="grid gap-3">
-              <Label htmlFor="text">Text Message</Label>
+              <Label htmlFor="text">Message Content</Label>
               <Textarea
                 id="text"
                 name="text"
-                placeholder="Enter text to analyze..."
+                placeholder="Analyze text for cyberbullying..."
                 className="min-h-24"
                 disabled={isLoading}
               />
             </div>
 
             <div className="grid gap-3">
-              <Label htmlFor="media">Media (Optional)</Label>
+              <Label htmlFor="media">Visual Context (Optional)</Label>
               <Input
                 id="media"
                 name="media"
@@ -272,72 +282,66 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 <Upload className="mr-2 h-5 w-5" />
                 {filePreview ? "Change Media" : "Upload Image or Video"}
               </Button>
-              {filePreview && (
-                <div className="mt-4 border rounded-lg overflow-hidden bg-black flex justify-center">
-                  {fileType?.startsWith("image/") ? (
-                    <img src={filePreview} alt="Preview" className="max-h-60" />
-                  ) : (
-                    <video src={filePreview} controls className="max-h-60" />
-                  )}
-                </div>
-              )}
             </div>
           </CardContent>
           <CardFooter className="border-t px-6 py-4 bg-muted/20">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Start AI Analysis
+              Analyze with Behavioral Context
             </Button>
           </CardFooter>
         </form>
       </Card>
 
-      {error && (
-        <Card className="border-destructive bg-destructive/5">
-          <CardHeader className="flex flex-row items-center gap-3">
-            <AlertCircle className="h-6 w-6 text-destructive" />
-            <CardTitle className="text-destructive text-base">Analysis Error: {error}</CardTitle>
-          </CardHeader>
-        </Card>
-      )}
-
       {result && (
-        <Card className="animate-in fade-in slide-in-from-bottom-2">
-          <CardHeader>
-            <CardTitle>AI Verification Result</CardTitle>
+        <Card className="animate-in fade-in slide-in-from-bottom-2 border-primary/20 shadow-lg">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Inference Result</CardTitle>
+            {result.isBursting && (
+              <Badge variant="destructive" className="animate-pulse">
+                Bursting Detected
+              </Badge>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
-            {result.textResult && (
+            {(result.textResult || result.mediaResult) && (
               <div className="p-4 rounded-lg border bg-muted/30">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-sm">Analysis Summary</h3>
-                  <Badge variant={result.textResult.isCyberbullying ? "destructive" : "default"}>
-                    {result.textResult.isCyberbullying ? "Cyberbullying Detected" : "Clear"}
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{result.relType}</Badge>
+                    <h3 className="font-semibold text-sm">AI Determination</h3>
+                  </div>
+                  <Badge variant={(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "destructive" : "default"}>
+                    {(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "Cyberbullying" : "Safe"}
                   </Badge>
                 </div>
-                <p className="text-sm mb-6 leading-relaxed text-muted-foreground">{result.textResult.reasoning}</p>
+                <p className="text-sm mb-6 leading-relaxed text-muted-foreground italic">
+                  "{result.textResult?.reasoning || result.mediaResult?.reasoning}"
+                </p>
                 
                 {isAdmin && (
                   <div className="pt-4 border-t">
-                    <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Admin Review (Feedback Loop)</p>
+                    <p className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-1">
+                      Admin Feedback Loop <Info className="h-3 w-3" />
+                    </p>
                     <div className="flex gap-2">
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="flex-1"
+                        className="flex-1 hover:bg-destructive/10"
                         onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Bullying")}
                       >
                         <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                        Mark as Bullying
+                        Label as Bullying
                       </Button>
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="flex-1"
+                        className="flex-1 hover:bg-primary/10"
                         onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Not Bullying")}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
-                        Mark as Safe
+                        Label as Safe
                       </Button>
                     </div>
                   </div>

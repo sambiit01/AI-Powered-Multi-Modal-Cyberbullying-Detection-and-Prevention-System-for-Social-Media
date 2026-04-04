@@ -1,7 +1,8 @@
+
 'use server';
 /**
  * @fileOverview Detects cyberbullying from text-based content with relationship context, 
- * few-shot examples, and admin-defined sensitivity thresholds.
+ * inferred behavioral metrics, few-shot examples, and admin thresholds.
  */
 
 import {ai} from '@/ai/genkit';
@@ -9,8 +10,10 @@ import {z} from 'genkit';
 
 const DetectCyberbullyingFromTextInputSchema = z.object({
   text: z.string().describe('The text content to analyze.'),
-  relationshipType: z.string().describe('The type of relationship between users.'),
-  historyType: z.string().describe('The interaction history description.'),
+  relationshipType: z.string().describe('The level of relationship (Stranger, Friend, etc.).'),
+  historyType: z.string().describe('The interaction history sentiment (Friendly, Neutral).'),
+  interactionFrequency: z.string().describe('How often they communicate.'),
+  isBursting: z.boolean().describe('Whether the sender is flooding messages without response.'),
   examples: z.array(z.any()).describe('Few-shot examples matching the relationship context.'),
   sensitivityThreshold: z.number().describe('The required confidence score percentage (0-100).'),
 });
@@ -27,24 +30,20 @@ export type DetectCyberbullyingFromTextOutput = z.infer<
   typeof DetectCyberbullyingFromTextOutputSchema
 >;
 
-export async function detectCyberbullyingFromText(
+export async function detectCyberbullying(
   input: DetectCyberbullyingFromTextInput
 ): Promise<DetectCyberbullyingFromTextOutput> {
-  console.log('[SERVER: detectCyberbullyingFromText] >>> STARTING CONTEXTUAL ANALYSIS');
-  console.log('[SERVER: detectCyberbullyingFromText] THRESHOLD:', input.sensitivityThreshold, '%');
+  console.log('[SERVER: detectCyberbullying] >>> STARTING BEHAVIORAL ANALYSIS');
+  console.log('[SERVER: detectCyberbullying] BURSTING MODE:', input.isBursting);
   
   const result = await detectCyberbullyingFromTextFlow(input);
 
-  // SUPPRESSION LOGIC: Compare confidence score against sensitivity threshold
   const thresholdAsDecimal = input.sensitivityThreshold / 100;
   if (result.isCyberbullying && result.confidenceScore < thresholdAsDecimal) {
-    console.log('[SERVER: detectCyberbullyingFromText] !!! THRESHOLD SUPPRESSION TRIGGERED');
-    console.log(`[SERVER: detectCyberbullyingFromText] Confidence (${result.confidenceScore}) < Threshold (${thresholdAsDecimal}). Setting isCyberbullying to FALSE.`);
-    
     return {
       ...result,
       isCyberbullying: false,
-      reasoning: `[Filtered by Admin Threshold] ${result.reasoning} (AI was only ${Math.round(result.confidenceScore * 100)}% confident, which is below the ${input.sensitivityThreshold}% requirement).`
+      reasoning: `[Suppressed] ${result.reasoning} (Confidence ${Math.round(result.confidenceScore * 100)}% < ${input.sensitivityThreshold}%)`
     };
   }
 
@@ -57,30 +56,31 @@ const detectCyberbullyingPrompt = ai.definePrompt({
     schema: DetectCyberbullyingFromTextInputSchema,
   },
   output: {schema: DetectCyberbullyingFromTextOutputSchema},
-  prompt: `You are an AI assistant specialized in detecting cyberbullying.
+  prompt: `You are an expert AI moderator specializing in cyberbullying detection.
   
-  ### CONTEXT:
-  - Relationship Status: {{{relationshipType}}}
-  - History of Interaction: {{{historyType}}}
+  ### BEHAVIORAL CONTEXT:
+  - Relationship Level: {{{relationshipType}}}
+  - Sentiment History: {{{historyType}}}
+  - Interaction Frequency: {{{interactionFrequency}}}
+  - Bursting Mode: {{#if isBursting}}ACTIVE (Sender is flooding messages){{else}}Inactive{{/if}}
   
-  ### REFERENCE EXAMPLES (Few-Shot Context):
+  ### REFERENCE EXAMPLES:
   {{#if examples}}
   {{#each examples}}
-  - Example Text: "{{{this.text}}}"
-    Relationship: {{{this.relationship}}}
-    Label: {{{this.label}}}
+  - Text: "{{{this.text}}}" | Relationship: {{{this.relationship}}} | Label: {{{this.label}}}
   {{/each}}
   {{else}}
   No specific reference examples found.
   {{/if}}
 
-  ### TEXT TO ANALYZE:
+  ### CONTENT TO ANALYZE:
   "{{{text}}}"
 
-  ### GUIDELINES:
-  1. established "Friends": Higher tolerance for banter and teasing.
-  2. "Strangers/Acquaintances": Stricter threshold for unsolicited insults.
-  
+  ### STRICT MODERATION GUIDELINES:
+  1. **Bursting Mode Warning**: If Bursting Mode is ACTIVE, the sender is sending many messages without a response. This is a high-risk indicator of harassment. Lower your tolerance significantly and be much stricter.
+  2. **Stranger Threshold**: If relationship is 'Stranger', even mild insults should be flagged.
+  3. **Friendship Context**: If relationship is 'Close Friend' and history is 'Friendly', allow for playful banter unless it involves genuine threats.
+
   Return JSON: { isCyberbullying, reasoning, confidenceScore }
   `,
 });
