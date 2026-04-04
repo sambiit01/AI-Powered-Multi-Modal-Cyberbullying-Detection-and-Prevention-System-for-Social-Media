@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,14 +44,17 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Info, CheckCircle2, XCircle, FileText, ListChecks } from "lucide-react";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Info, CheckCircle2, XCircle, FileText, ListChecks, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
@@ -80,6 +84,7 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
   const { toast } = useToast();
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === "superuser";
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
 
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportSchema),
@@ -91,7 +96,6 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
   });
 
   async function onSubmit(data: ReportFormValues) {
-    console.log("[REPORTING] Manual report submitted:", data);
     await addActivity({
       type: "Report",
       details: `Manual report for: ${data.contentUrl}`,
@@ -122,6 +126,7 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
           title: "Incident Reviewed",
           description: `Successfully labeled as ${correctedLabel}.`,
         });
+        setSelectedActivity(null);
       })
       .catch((err) => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({
@@ -214,115 +219,150 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
   );
 
   const ActivityReviewTable = (
-    <Card>
-      <CardHeader>
-        <CardTitle>Global Activity Review</CardTitle>
-        <CardDescription>
-          Manage and refine all detected incidents across the platform.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {activities.length > 0 ? (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[150px]">Date</TableHead>
-                  <TableHead>Activity Details</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activities.map((activity) => (
-                  <TableRow key={activity.id}>
-                    <TableCell className="text-xs font-medium">
-                      {format(parseISO(activity.date), "MMM d, yyyy HH:mm")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="truncate max-w-[250px] font-medium">
-                          {activity.details}
-                        </span>
-                        {activity.reasoning && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Info className="h-4 w-4 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-md">
-                                <p className="text-sm font-semibold mb-1">AI Reasoning:</p>
-                                <p className="text-xs">{activity.reasoning}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground mt-1">
-                        User: {activity.userId}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{activity.type}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          activity.status === "Flagged" || activity.status === "Action Taken"
-                            ? "destructive"
-                            : activity.status === "Pending"
-                            ? "secondary"
-                            : "default"
-                        }
-                      >
-                        {activity.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 text-destructive"
-                                onClick={() => handleCorrectLabel(activity, "Bullying")}
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Mark as Bullying</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 text-primary"
-                                onClick={() => handleCorrectLabel(activity, "Not Bullying")}
-                              >
-                                <CheckCircle2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Mark as Safe</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    </TableCell>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Global Activity Review</CardTitle>
+          <CardDescription>
+            Audit and refine all platform incidents with full contextual detail.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {activities.length > 0 ? (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Summary</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="text-center py-10 text-muted-foreground">
-            No platform activity found to review.
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                </TableHeader>
+                <TableBody>
+                  {activities.map((activity) => (
+                    <TableRow key={activity.id}>
+                      <TableCell className="text-xs">
+                        {format(parseISO(activity.date), "MMM d, HH:mm")}
+                      </TableCell>
+                      <TableCell className="font-medium max-w-[200px] truncate">
+                        {activity.details}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{activity.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            activity.status === "Flagged" || activity.status === "Action Taken"
+                              ? "destructive"
+                              : activity.status === "Pending"
+                              ? "secondary"
+                              : "default"
+                          }
+                        >
+                          {activity.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedActivity(activity)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Review Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-10 text-muted-foreground">
+              No platform activity found to review.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!selectedActivity} onOpenChange={() => setSelectedActivity(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Incident Detailed Review</DialogTitle>
+            <DialogDescription>
+              Analyze the full context and AI reasoning before providing a manual correction.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedActivity && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground font-semibold">Incident Type</p>
+                  <p>{selectedActivity.type}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground font-semibold">Date</p>
+                  <p>{format(parseISO(selectedActivity.date), "PPP p")}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground font-semibold">Sender UID</p>
+                  <p className="font-mono text-xs">{selectedActivity.userId}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground font-semibold">Relationship Context</p>
+                  <Badge variant="outline">{selectedActivity.relType || "Unknown"}</Badge>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="text-sm font-semibold mb-2">Original Content</p>
+                <div className="bg-muted p-3 rounded-md text-sm italic">
+                  "{selectedActivity.originalText || selectedActivity.details}"
+                </div>
+              </div>
+
+              {selectedActivity.reasoning && (
+                <div>
+                  <p className="text-sm font-semibold mb-2">AI Behavioral Reasoning</p>
+                  <div className="bg-primary/5 border border-primary/20 p-3 rounded-md text-sm">
+                    {selectedActivity.reasoning}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 border-t">
+                <p className="text-xs font-bold uppercase text-muted-foreground mb-4">
+                  Manual Intervention
+                </p>
+                <div className="flex gap-3">
+                  <Button 
+                    className="flex-1 bg-destructive hover:bg-destructive/90" 
+                    onClick={() => handleCorrectLabel(selectedActivity, "Bullying")}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Correct as Bullying
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 border-primary text-primary hover:bg-primary/5"
+                    onClick={() => handleCorrectLabel(selectedActivity, "Not Bullying")}
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Correct as Safe
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 
   if (!isAdmin) {

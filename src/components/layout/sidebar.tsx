@@ -11,7 +11,6 @@ import {
 import {
   LayoutGrid,
   MessageSquareWarning,
-  UsersRound,
   FilePlus2,
   Settings,
 } from "lucide-react";
@@ -21,7 +20,6 @@ import { useAuth } from "@/hooks/use-auth";
 export type View =
   | "overview"
   | "moderation"
-  | "user-analysis"
   | "reporting"
   | "settings";
 
@@ -37,7 +35,6 @@ export function AppSidebar({ activeView, setActiveView }: AppSidebarProps) {
   const navItems = [
     { id: "overview", label: "Overview", icon: LayoutGrid, adminOnly: false },
     { id: "moderation", label: "Moderation", icon: MessageSquareWarning, adminOnly: false },
-    { id: "user-analysis", label: "User Analysis", icon: UsersRound, adminOnly: true },
     { id: "reporting", label: "Reporting", icon: FilePlus2, adminOnly: false },
   ];
 

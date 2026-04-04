@@ -9,7 +9,6 @@ import {
   MessageSquareWarning,
   PanelLeft,
   Settings,
-  UsersRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +33,6 @@ type AppHeaderProps = {
 const navItems = [
   { id: "overview", label: "Overview", icon: LayoutGrid },
   { id: "moderation", label: "Moderation", icon: MessageSquareWarning },
-  { id: "user-analysis", label: "User Analysis", icon: UsersRound },
   { id: "reporting", label: "Reporting", icon: FilePlus2 },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -104,7 +102,7 @@ export function AppHeader({ activeView, setActiveView }: AppHeaderProps) {
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>{user?.email || "My Account"}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setActiveView("settings")}>
             <Settings className="mr-2 h-4 w-4" />
             Settings
           </DropdownMenuItem>

@@ -11,7 +11,6 @@ import { type View, AppSidebar } from "@/components/layout/sidebar";
 import { AppHeader } from "@/components/layout/header";
 import Overview from "@/components/dashboard/overview";
 import Moderation from "@/components/dashboard/moderation";
-import UserAnalysis from "@/components/dashboard/user-analysis";
 import ReportingTool from "@/components/dashboard/reporting-tool";
 import Settings from "@/components/dashboard/settings";
 import { Loader2, AlertTriangle } from "lucide-react";
@@ -126,7 +125,6 @@ export default function Dashboard() {
     switch (activeView) {
       case "overview": return <Overview activities={activities} />;
       case "moderation": return <Moderation addActivity={addActivity} />;
-      case "user-analysis": return <UserAnalysis addActivity={addActivity} />;
       case "reporting": return <ReportingTool addActivity={addActivity} activities={activities} />;
       case "settings": return <Settings />;
       default: return <Overview activities={activities} />;
