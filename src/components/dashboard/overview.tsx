@@ -24,6 +24,8 @@ import {
   Users,
   MessageSquareWarning,
   Info,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import {
   ChartContainer,
@@ -36,9 +38,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { type Activity } from "./dashboard";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 const chartConfig = {
   incidents: {
@@ -53,6 +61,7 @@ type OverviewProps = {
 
 export default function Overview({ activities }: OverviewProps) {
   const { userProfile } = useAuth();
+  const { toast } = useToast();
   const isAdmin = userProfile?.role === "superuser";
 
   const incidentsFlagged = activities.filter(
@@ -65,7 +74,6 @@ export default function Overview({ activities }: OverviewProps) {
   const chartData = React.useMemo(() => {
     const months: { [key: string]: number } = {};
 
-    // Initialize the last 6 months
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -89,6 +97,32 @@ export default function Overview({ activities }: OverviewProps) {
       incidents: months[key] || 0,
     }));
   }, [activities]);
+
+  const handleCorrectLabel = async (originalText: string, relType: string, correctedLabel: string) => {
+    const feedbackData = {
+      text: originalText,
+      relationship: relType || "Stranger",
+      history: "Admin Corrected from Log",
+      label: correctedLabel,
+      sourceFile: "Activity Feed Correction",
+      uploadedAt: new Date().toISOString()
+    };
+
+    addDoc(collection(db, "contextExamples"), feedbackData)
+      .then(() => {
+        toast({
+          title: "Label Corrected",
+          description: "This activity has been re-labeled for AI training.",
+        });
+      })
+      .catch((err) => {
+        errorEmitter.emit("permission-error", new FirestorePermissionError({
+          path: "contextExamples",
+          operation: "create",
+          requestResourceData: feedbackData
+        }));
+      });
+  };
 
   return (
     <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
@@ -174,7 +208,7 @@ export default function Overview({ activities }: OverviewProps) {
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
             <CardDescription>
-              {isAdmin ? "Unified log of all automated detections." : "A log of your automated detections."}
+              {isAdmin ? "Unified log for administrator review." : "A log of your automated detections."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -182,20 +216,18 @@ export default function Overview({ activities }: OverviewProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
                     <TableHead>Details</TableHead>
                     <TableHead>Status</TableHead>
+                    {isAdmin && <TableHead className="text-right">Action</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activities.slice(0, 10).map((activity) => (
+                  {activities.slice(0, 15).map((activity) => (
                     <TableRow key={activity.id}>
                       <TableCell>
-                        <Badge variant="outline">{activity.type}</Badge>
-                      </TableCell>
-                      <TableCell>
                         <div className="flex items-center gap-2">
-                          <div className="font-medium truncate max-w-[150px]">{activity.details}</div>
+                          <Badge variant="outline" className="shrink-0">{activity.type}</Badge>
+                          <div className="font-medium truncate max-w-[120px]">{activity.details}</div>
                           {activity.reasoning && (
                             <TooltipProvider>
                               <Tooltip>
@@ -228,13 +260,47 @@ export default function Overview({ activities }: OverviewProps) {
                           {activity.status}
                         </Badge>
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8"
+                                    onClick={() => handleCorrectLabel(activity.originalText || activity.details, activity.relType || "Stranger", "Bullying")}
+                                  >
+                                    <XCircle className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Correct: Bullying</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8"
+                                    onClick={() => handleCorrectLabel(activity.originalText || activity.details, activity.relType || "Stranger", "Not Bullying")}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Correct: Safe</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             ) : (
               <div className="text-center text-muted-foreground py-8 text-sm">
-                No activity yet. Analyze content to see results.
+                No activity yet.
               </div>
             )}
           </CardContent>

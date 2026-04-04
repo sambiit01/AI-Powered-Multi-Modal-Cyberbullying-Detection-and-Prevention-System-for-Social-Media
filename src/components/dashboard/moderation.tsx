@@ -44,7 +44,7 @@ type AnalysisResult = {
 };
 
 export default function Moderation({ addActivity }: ModerationProps) {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -52,6 +52,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = userProfile?.role === "superuser";
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -315,29 +317,31 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 </div>
                 <p className="text-sm mb-6 leading-relaxed text-muted-foreground">{result.textResult.reasoning}</p>
                 
-                <div className="pt-4 border-t">
-                  <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Refine AI Accuracy</p>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Bullying")}
-                    >
-                      <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                      Mark as Bullying
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Not Bullying")}
-                    >
-                      <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
-                      Mark as Safe
-                    </Button>
+                {isAdmin && (
+                  <div className="pt-4 border-t">
+                    <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Admin Review (Feedback Loop)</p>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Bullying")}
+                      >
+                        <XCircle className="mr-2 h-4 w-4 text-destructive" />
+                        Mark as Bullying
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", "Not Bullying")}
+                      >
+                        <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
+                        Mark as Safe
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </CardContent>
