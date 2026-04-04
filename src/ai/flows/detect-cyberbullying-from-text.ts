@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview Detects cyberbullying from text-based content using AI.
+ * @fileOverview Detects cyberbullying from text-based content using AI with relationship context and few-shot examples.
  *
  * - detectCyberbullyingFromText - A function that analyzes text for cyberbullying.
  * - DetectCyberbullyingFromTextInput - The input type for the detectCyberbullyingFromText function.
@@ -9,11 +9,13 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import {getOrCreateRelationship, db} from '@/lib/firebase';
+import {collection, query, where, limit, getDocs} from 'firebase/firestore';
 
 const DetectCyberbullyingFromTextInputSchema = z.object({
   text: z.string().describe('The text content to analyze for cyberbullying.'),
-  relationshipType: z.string().describe('The type of relationship between sender and receiver.'),
-  historyType: z.string().describe('The history of interaction between sender and receiver.'),
+  senderId: z.string().describe('The ID of the user sending the content.'),
+  receiverId: z.string().describe('The ID of the user receiving the content.'),
 });
 export type DetectCyberbullyingFromTextInput = z.infer<
   typeof DetectCyberbullyingFromTextInputSchema
@@ -23,12 +25,12 @@ const DetectCyberbullyingFromTextOutputSchema = z.object({
   isCyberbullying: z
     .boolean()
     .describe('Whether the text content contains cyberbullying.'),
-  reason: z
+  reasoning: z
     .string()
-    .describe('The reason why the text content is classified as cyberbullying.'),
+    .describe('The reasoning why the text content is classified as cyberbullying or not.'),
   confidenceScore: z
     .number()
-    .describe('A score indicating the confidence level of the cyberbullying detection.'),
+    .describe('A score indicating the confidence level of the detection (0-1).'),
 });
 export type DetectCyberbullyingFromTextOutput = z.infer<
   typeof DetectCyberbullyingFromTextOutputSchema
@@ -37,44 +39,49 @@ export type DetectCyberbullyingFromTextOutput = z.infer<
 export async function detectCyberbullyingFromText(
   input: DetectCyberbullyingFromTextInput
 ): Promise<DetectCyberbullyingFromTextOutput> {
-  console.log('\n\n==================================================');
-  console.log('[SERVER: detectCyberbullyingFromText] >>> STARTING NEW ANALYSIS');
-  console.log('[SERVER: detectCyberbullyingFromText] STEP 1: RECEIVED INPUT');
-  console.log('==================================================\n');
-  
-  try {
-    const result = await detectCyberbullyingFromTextFlow(input);
-    
-    console.log('\n--------------------------------------------------');
-    console.log('[SERVER: detectCyberbullyingFromText] STEP 2: ANALYSIS COMPLETE');
-    console.log('--------------------------------------------------\n');
-    return result;
-  } catch (error) {
-    console.error('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.error('[SERVER: detectCyberbullyingFromText] !!! CRITICAL ERROR:', error);
-    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n');
-    throw error;
-  }
+  console.log('[SERVER: detectCyberbullyingFromText] >>> STARTING CONTEXTUAL ANALYSIS');
+  return detectCyberbullyingFromTextFlow(input);
 }
 
 const detectCyberbullyingPrompt = ai.definePrompt({
   name: 'detectCyberbullyingPrompt',
   input: {
-    schema: DetectCyberbullyingFromTextInputSchema,
+    schema: z.object({
+      text: z.string(),
+      relationshipType: z.string(),
+      historyType: z.string(),
+      examples: z.array(z.any()),
+    }),
   },
   output: {schema: DetectCyberbullyingFromTextOutputSchema},
   prompt: `You are an AI assistant specialized in detecting cyberbullying.
-  Analyze the following text considering the context of the relationship between the sender and receiver.
   
-  Relationship Status: {{{relationshipType}}}
-  History of Interaction: {{{historyType}}}
+  Evaluate the provided text within the context of the relationship between the sender and receiver.
   
-  Text: {{{text}}}
+  ### CONTEXT:
+  - Relationship Status: {{{relationshipType}}}
+  - History of Interaction: {{{historyType}}}
+  
+  ### REFERENCE EXAMPLES (Similar Contexts):
+  {{#if examples}}
+  {{#each examples}}
+  - Example Text: "{{{this.text}}}"
+    Relationship: {{{this.relationship}}}
+    Label: {{{this.label}}}
+  {{/each}}
+  {{else}}
+  No specific reference examples found.
+  {{/if}}
 
-  GUIDELINES:
-  1. If the relationship is "Friends" or "Close", allow for more casual language and banter unless it is clearly harmful.
-  2. If the relationship is "Stranger", be stricter with aggressive or unsolicited language.
-  3. Look for signs of harassment, threats, or hate speech.
+  ### TEXT TO ANALYZE:
+  "{{{text}}}"
+
+  ### GUIDELINES:
+  1. Use a HIGHER hostility threshold for established "Friends" or "Close" relationships. Allow for casual banter, sarcasm, and mutual teasing unless it is clearly harmful, non-consensual, or escalates to severe harassment.
+  2. Use a STRICTER threshold for "Strangers" or "Acquaintances". Aggressive, unsolicited, or insulting language here is more likely to be bullying.
+  3. Look for signs of persistent harassment, physical threats, or systemic hate speech.
+  
+  Return a JSON response with isCyberbullying (boolean), reasoning (string), and confidenceScore (0-1).
   `,
 });
 
@@ -85,8 +92,33 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     outputSchema: DetectCyberbullyingFromTextOutputSchema,
   },
   async input => {
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] SENDING TO GEMINI AI WITH CONTEXT...');
-    const {output} = await detectCyberbullyingPrompt(input);
+    console.log('[SERVER: detectCyberbullyingFromTextFlow] Fetching relationship metadata...');
+    const relationship = await getOrCreateRelationship(input.senderId, input.receiverId);
+    
+    const relType = (relationship.relationshipType as string) || 'Stranger';
+    const histType = (relationship.historyType as string) || 'None';
+
+    console.log(`[SERVER: detectCyberbullyingFromTextFlow] Querying reference examples for: ${relType}`);
+    
+    // Fetch 3 most relevant examples from contextExamples
+    const examplesRef = collection(db, 'contextExamples');
+    const q = query(examplesRef, where('relationship', '==', relType), limit(3));
+    const querySnapshot = await getDocs(q);
+    
+    const examples: any[] = [];
+    querySnapshot.forEach((doc) => {
+      examples.push(doc.data());
+    });
+
+    console.log(`[SERVER: detectCyberbullyingFromTextFlow] Found ${examples.length} reference examples.`);
+
+    const {output} = await detectCyberbullyingPrompt({
+      text: input.text,
+      relationshipType: relType,
+      historyType: histType,
+      examples: examples,
+    });
+
     return output!;
   }
 );

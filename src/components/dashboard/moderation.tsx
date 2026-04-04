@@ -25,7 +25,6 @@ import {
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { getOrCreateRelationship } from "@/lib/firebase";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date">) => void;
@@ -54,7 +53,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setFilePreview(reader.result as string);
-        console.log("[CLIENT] >>> FILE PREVIEW GENERATED (Base64)");
       };
       reader.readAsDataURL(file);
     }
@@ -63,7 +61,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     console.log("\n[CLIENT] **************************************************");
-    console.log("[CLIENT] * ACTION: ANALYZE CONTENT BUTTON CLICKED        *");
+    console.log("[CLIENT] * ACTION: ANALYZE CONTENT (Step 1: UI Trigger)  *");
     console.log("[CLIENT] **************************************************\n");
     
     setIsLoading(true);
@@ -81,7 +79,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       return;
     }
 
-    console.log("[CLIENT] CONTEXT -> Sender:", user.uid, "Receiver:", receiverId);
+    console.log("[CLIENT] STEP 2: PREPARING PAYLOAD -> Sender:", user.uid, "Receiver:", receiverId);
 
     if (!text && (!file || file.size === 0)) {
       setError("Please provide text, an image, or a video to analyze.");
@@ -90,20 +88,16 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     try {
-      // Fetch relationship context on client
-      console.log("[CLIENT] Fetching relationship context...");
-      const relationship = await getOrCreateRelationship(user.uid, receiverId);
-
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
       let mediaResult: DetectCyberbullyingFromTextOutput | undefined;
       let extractedText: string | undefined;
 
       if (text) {
-        console.log("[CLIENT] FLOW: Starting Text Analysis with context...");
+        console.log("[CLIENT] STEP 3A: STARTING TEXT FLOW...");
         textResult = await detectCyberbullyingFromText({ 
           text, 
-          relationshipType: relationship.relationshipType as string,
-          historyType: relationship.historyType as string,
+          senderId: user.uid,
+          receiverId: receiverId,
         });
         
         addActivity({
@@ -115,18 +109,18 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       if (file && file.size > 0 && filePreview) {
-        console.log("[CLIENT] FLOW: Starting Media Analysis (Vision AI)...");
+        console.log("[CLIENT] STEP 3B: STARTING MEDIA VISION FLOW...");
         const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
           { dataUri: filePreview }
         );
         extractedText = mediaAnalysis.text;
 
         if (extractedText) {
-          console.log("[CLIENT] FLOW: Analyzing Extracted Text for Bullying...");
+          console.log("[CLIENT] STEP 4: ANALYZING MEDIA TEXT FOR BULLYING...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
-            relationshipType: relationship.relationshipType as string,
-            historyType: relationship.historyType as string,
+            senderId: user.uid,
+            receiverId: receiverId,
           });
           
           addActivity({
@@ -138,10 +132,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
         }
       }
 
+      console.log("[CLIENT] STEP 5: RESULTS RECEIVED. UPDATING UI.");
       setResult({ textResult, mediaResult, extractedText });
     } catch (e: any) {
-      console.error("[CLIENT] CRITICAL ERROR IN HANDLESUBMIT:", e);
-      setError("An error occurred during analysis. Please check your connection and try again.");
+      console.error("[CLIENT] CRITICAL FAILURE DURING ANALYSIS:", e);
+      setError("An error occurred during analysis. Please check the logs.");
     } finally {
       setIsLoading(false);
     }
@@ -156,7 +151,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
         <CardHeader>
           <CardTitle>Contextual Content Moderation</CardTitle>
           <CardDescription>
-            Analyze interactions between users. The AI considers relationship history to accurately identify harassment.
+            Analyze interactions between users. The AI considers relationship history and similar context examples to accurately identify harassment.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -237,7 +232,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
           <CardFooter className="border-t px-6 py-4 bg-muted/20">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Analyze with Context
+              Analyze with Full Context
             </Button>
           </CardFooter>
         </form>
@@ -261,7 +256,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
         <Card className="animate-in fade-in slide-in-from-bottom-2 duration-300">
           <CardHeader>
             <CardTitle>AI Analysis Results</CardTitle>
-            <CardDescription>Context-aware assessment of the interaction.</CardDescription>
+            <CardDescription>Context-aware assessment powered by few-shot learning.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-8">
             {result.textResult && (
@@ -281,13 +276,13 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 </h3>
                 <div className="grid gap-4">
                   <div className="text-sm">
-                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">Reasoning:</span>
+                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">AI Reasoning:</span>
                     <p className="leading-relaxed">
-                      {result.textResult.reason}
+                      {result.textResult.reasoning}
                     </p>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
-                    <span>Confidence</span>
+                    <span>Confidence Score</span>
                     <span className="font-mono">{(result.textResult.confidenceScore * 100).toFixed(2)}%</span>
                   </div>
                 </div>
@@ -319,13 +314,13 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 )}
                 <div className="grid gap-4">
                   <div className="text-sm">
-                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">Reasoning:</span>
+                    <span className="font-bold uppercase text-xs text-muted-foreground block mb-1">AI Reasoning:</span>
                     <p className="leading-relaxed">
-                      {result.mediaResult.reason}
+                      {result.mediaResult.reasoning}
                     </p>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
-                    <span>Confidence</span>
+                    <span>Confidence Score</span>
                     <span className="font-mono">{(result.mediaResult.confidenceScore * 100).toFixed(2)}%</span>
                   </div>
                 </div>
