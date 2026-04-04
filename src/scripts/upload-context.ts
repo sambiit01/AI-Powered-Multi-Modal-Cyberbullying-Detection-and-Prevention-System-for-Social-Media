@@ -20,7 +20,8 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function uploadCSVData() {
-  const files = ['bull.csv', 'bull2.csv'];
+  // List of files to process. We'll check for all three versions.
+  const files = ['bull.csv', 'bull2.csv', 'bull3.csv'];
   const docsDir = path.join(process.cwd(), 'docs');
 
   console.log('--------------------------------------------------');
@@ -31,7 +32,7 @@ async function uploadCSVData() {
     const filePath = path.join(docsDir, fileName);
 
     if (!fs.existsSync(filePath)) {
-      console.warn(`[UPLOAD SCRIPT] WARNING: File not found at ${filePath}. Skipping.`);
+      console.log(`[UPLOAD SCRIPT] INFO: File ${fileName} not found. Skipping.`);
       continue;
     }
 
@@ -79,7 +80,10 @@ async function uploadCSVData() {
           uploadedAt: new Date().toISOString()
         };
 
-        await addDoc(collection(db, 'contextExamples'), data);
+        // Only upload if text is present
+        if (data.text) {
+          await addDoc(collection(db, 'contextExamples'), data);
+        }
         
         if ((index + 1) % 50 === 0 || index === records.length - 1) {
           console.log(`[UPLOAD SCRIPT] PROGRESS: ${index + 1}/${records.length} records processed for ${fileName}.`);

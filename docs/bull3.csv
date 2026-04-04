@@ -1,0 +1,101 @@
+Text,Relationship_Level,Interaction_History,Interaction_Frequency,Label
+"I'll kill you 😘",close friend,Friendly,Rare,Not Bullying
+"I'll kill you",stranger,None,One-time,Bullying
+"You're an idiot 😂",close friend,Friendly,Frequent,Not Bullying
+"You're an idiot",stranger,None,One-time,Bullying
+"I hate you 😜",frequent contact,Playful,Occasional,Not Bullying
+"I hate you",stranger,Hostile,One-time,Bullying
+"Shut up 🙄",close friend,Friendly,Frequent,Not Bullying
+"Shut up",stranger,None,One-time,Bullying
+"You're so dumb 🤦",acquaintance,Friendly,Occasional,Not Bullying
+"You're so dumb",stranger,None,One-time,Bullying
+"Nobody likes you 💔",close friend,Empathetic,Rare,Not Bullying
+"Nobody likes you",stranger,None,One-time,Bullying
+"Die",close friend,Friendly,Frequent,Not Bullying
+"Die",stranger,None,One-time,Bullying
+"You're worthless",frequent contact,Serious criticism,Rare,Bullying
+"You're worthless 😢",close friend,Supportive,Rare,Not Bullying
+"Kill yourself",stranger,None,One-time,Bullying
+"Kill yourself lol",close friend,Dark humor,Rare,Not Bullying
+"I hope you fail",acquaintance,Competitive,Rare,Bullying
+"I hope you fail 😅",close friend,Friendly,Rare,Not Bullying
+"Get out of my life",stranger,Hostile,One-time,Bullying
+"Get out of my life 😂",close friend,Playful,Rare,Not Bullying
+"You're a loser",stranger,None,One-time,Bullying
+"You're a loser 🤪",close friend,Friendly,Frequent,Not Bullying
+"Stop talking",acquaintance,None,One-time,Not Bullying
+"Stop talking",stranger,None,One-time,Bullying
+"You're ugly",stranger,None,One-time,Bullying
+"You're ugly 😂",close friend,Friendly,Rare,Not Bullying
+"I'll make you pay",stranger,Hostile,One-time,Bullying
+"I'll make you pay 😈",close friend,Playful,Rare,Not Bullying
+"Nobody cares",stranger,None,One-time,Bullying
+"Nobody cares ❤️",close friend,Comforting,Rare,Not Bullying
+"What's wrong with you?",stranger,None,One-time,Bullying
+"What's wrong with you? 😂",close friend,Friendly,Frequent,Not Bullying
+"You're pathetic",stranger,None,One-time,Bullying
+"You're pathetic 😭",frequent contact,Empathetic,Rare,Not Bullying
+"I'll ruin you",stranger,None,One-time,Bullying
+"I'll ruin you 🎮",close friend,Competitive joke,Frequent,Not Bullying
+"You're a mistake",frequent contact,Angry,Rare,Bullying
+"You're a mistake 🤗",close friend,Comforting,Rare,Not Bullying
+"F*** you",stranger,None,One-time,Bullying
+"F*** you 😂",close friend,Friendly,Frequent,Not Bullying
+"You deserve to suffer",stranger,Hostile,Occasional,Bullying
+"You deserve to suffer 😅",close friend,Joking,Rare,Not Bullying
+"I'll destroy you",stranger,None,One-time,Bullying
+"I'll destroy you 🔥",close friend,Game trash-talk,Frequent,Not Bullying
+"You're so annoying",acquaintance,Frustrated,One-time,Bullying
+"You're so annoying 😂",frequent contact,Playful,Occasional,Not Bullying
+"I wish you were dead",stranger,None,One-time,Bullying
+"I wish you were dead 😜",close friend,Dark joke,Rare,Not Bullying
+"Get lost",stranger,None,One-time,Bullying
+"Get lost 🙄",close friend,Playful,Frequent,Not Bullying
+"You're a cancer",stranger,None,One-time,Bullying
+"You're a cancer 😭",close friend,Empathetic,Rare,Not Bullying
+"I'll haunt you",stranger,Hostile,One-time,Bullying
+"I'll haunt you 👻",close friend,Playful,Rare,Not Bullying
+"You're useless",acquaintance,Disappointed,One-time,Bullying
+"You're useless 😴",close friend,Joking,Rare,Not Bullying
+"Why were you born?",stranger,None,One-time,Bullying
+"Why were you born? 😂",frequent contact,Sarcastic,Rare,Not Bullying
+"I'm going to make your life hell",stranger,None,One-time,Bullying
+"I'm going to make your life hell 😈",close friend,Playful,Rare,Not Bullying
+"You're worthless trash",stranger,None,One-time,Bullying
+"You're worthless trash 😂",close friend,Friendly,Rare,Not Bullying
+"I'll get you",stranger,Threatening,One-time,Bullying
+"I'll get you 😜",close friend,Game banter,Frequent,Not Bullying
+"Nobody wants you here",stranger,None,One-time,Bullying
+"Nobody wants you here 🙃",close friend,Joking,Rare,Not Bullying
+"You're a disappointment",frequent contact,Serious criticism,Occasional,Bullying
+"You're a disappointment 🤦",frequent contact,Playful,Rare,Not Bullying
+"I hope you get hurt",stranger,None,One-time,Bullying
+"I hope you get hurt 😂",close friend,Dark joke,Rare,Not Bullying
+"Shut your mouth",stranger,None,One-time,Bullying
+"Shut your mouth 😘",close friend,Playful,Rare,Not Bullying
+"You're a joke",acquaintance,Mean,One-time,Bullying
+"You're a joke 😂",close friend,Friendly,Frequent,Not Bullying
+"I'll make you cry",stranger,Hostile,One-time,Bullying
+"I'll make you cry 😂",close friend,Joking,Rare,Not Bullying
+"You're nothing",stranger,None,One-time,Bullying
+"You're nothing 🥺",close friend,Comforting,Rare,Not Bullying
+"Get out of here",stranger,None,One-time,Bullying
+"Get out of here 🙄",frequent contact,Playful,Occasional,Not Bullying
+"I'm going to end you",stranger,None,One-time,Bullying
+"I'm going to end you 🎮",close friend,Game trash-talk,Frequent,Not Bullying
+"You're so stupid",stranger,None,One-time,Bullying
+"You're so stupid 🤣",close friend,Friendly,Frequent,Not Bullying
+"I hate your guts",stranger,Hostile,Occasional,Bullying
+"I hate your guts 😂",close friend,Playful,Rare,Not Bullying
+"Kill yourself already",stranger,None,One-time,Bullying
+"Kill yourself already 😜",close friend,Dark humor,Rare,Not Bullying
+"You're a freak",stranger,None,One-time,Bullying
+"You're a freak 🤪",frequent contact,Playful,Rare,Not Bullying
+"I'll make sure you regret it",stranger,Hostile,One-time,Bullying
+"I'll make sure you regret it 😉",close friend,Playful,Rare,Not Bullying
+"You're garbage",stranger,None,One-time,Bullying
+"You're garbage 😂",close friend,Friendly,Rare,Not Bullying
+"I wish you'd disappear",stranger,None,One-time,Bullying
+"I wish you'd disappear 😂",close friend,Joking,Rare,Not Bullying
+"You're a waste of space",stranger,None,One-time,Bullying
+"You're a waste of space 😴",close friend,Friendly banter,Rare,Not Bullying
