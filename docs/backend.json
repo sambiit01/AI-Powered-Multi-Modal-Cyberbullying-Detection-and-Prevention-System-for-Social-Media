@@ -52,6 +52,16 @@
         "sourceFile": { "type": "string" },
         "uploadedAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "AdminSettings": {
+      "title": "Admin Settings",
+      "description": "Global system configurations for AI sensitivity and behavior",
+      "type": "object",
+      "properties": {
+        "sensitivityThreshold": { "type": "number", "description": "0-100 score" },
+        "banterTolerance": { "type": "number", "description": "0-100 score" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -73,6 +83,10 @@
     "/contextExamples/{exampleId}": {
       "schema": "#/backend/entities/ContextExample",
       "description": "Read-only access to training examples"
+    },
+    "/adminSettings/{settingId}": {
+      "schema": "#/backend/entities/AdminSettings",
+      "description": "Global admin configuration"
     }
   }
 }

@@ -1,35 +1,27 @@
 'use server';
 /**
- * @fileOverview Detects cyberbullying from text-based content using AI with relationship context and few-shot examples.
- *
- * - detectCyberbullyingFromText - A function that analyzes text for cyberbullying.
- * - DetectCyberbullyingFromTextInput - The input type for the detectCyberbullyingFromText function.
- * - DetectCyberbullyingFromTextOutput - The return type for the detectCyberbullyingFromText function.
+ * @fileOverview Detects cyberbullying from text-based content with relationship context, 
+ * few-shot examples, and admin-defined sensitivity thresholds.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const DetectCyberbullyingFromTextInputSchema = z.object({
-  text: z.string().describe('The text content to analyze for cyberbullying.'),
-  relationshipType: z.string().describe('The type of relationship between sender and receiver.'),
-  historyType: z.string().describe('The history of interaction between users.'),
-  examples: z.array(z.any()).describe('Few-shot examples of similar interactions.'),
+  text: z.string().describe('The text content to analyze.'),
+  relationshipType: z.string().describe('The type of relationship between users.'),
+  historyType: z.string().describe('The interaction history description.'),
+  examples: z.array(z.any()).describe('Few-shot examples matching the relationship context.'),
+  sensitivityThreshold: z.number().describe('The required confidence score percentage (0-100).'),
 });
 export type DetectCyberbullyingFromTextInput = z.infer<
   typeof DetectCyberbullyingFromTextInputSchema
 >;
 
 const DetectCyberbullyingFromTextOutputSchema = z.object({
-  isCyberbullying: z
-    .boolean()
-    .describe('Whether the text content contains cyberbullying.'),
-  reasoning: z
-    .string()
-    .describe('The reasoning why the text content is classified as cyberbullying or not.'),
-  confidenceScore: z
-    .number()
-    .describe('A score indicating the confidence level of the detection (0-1).'),
+  isCyberbullying: z.boolean().describe('Whether the content is flagged.'),
+  reasoning: z.string().describe('AI reasoning for the classification.'),
+  confidenceScore: z.number().describe('The model confidence level (0-1).'),
 });
 export type DetectCyberbullyingFromTextOutput = z.infer<
   typeof DetectCyberbullyingFromTextOutputSchema
@@ -39,7 +31,24 @@ export async function detectCyberbullyingFromText(
   input: DetectCyberbullyingFromTextInput
 ): Promise<DetectCyberbullyingFromTextOutput> {
   console.log('[SERVER: detectCyberbullyingFromText] >>> STARTING CONTEXTUAL ANALYSIS');
-  return detectCyberbullyingFromTextFlow(input);
+  console.log('[SERVER: detectCyberbullyingFromText] THRESHOLD:', input.sensitivityThreshold, '%');
+  
+  const result = await detectCyberbullyingFromTextFlow(input);
+
+  // SUPPRESSION LOGIC: Compare confidence score against sensitivity threshold
+  const thresholdAsDecimal = input.sensitivityThreshold / 100;
+  if (result.isCyberbullying && result.confidenceScore < thresholdAsDecimal) {
+    console.log('[SERVER: detectCyberbullyingFromText] !!! THRESHOLD SUPPRESSION TRIGGERED');
+    console.log(`[SERVER: detectCyberbullyingFromText] Confidence (${result.confidenceScore}) < Threshold (${thresholdAsDecimal}). Setting isCyberbullying to FALSE.`);
+    
+    return {
+      ...result,
+      isCyberbullying: false,
+      reasoning: `[Filtered by Admin Threshold] ${result.reasoning} (AI was only ${Math.round(result.confidenceScore * 100)}% confident, which is below the ${input.sensitivityThreshold}% requirement).`
+    };
+  }
+
+  return result;
 }
 
 const detectCyberbullyingPrompt = ai.definePrompt({
@@ -50,13 +59,11 @@ const detectCyberbullyingPrompt = ai.definePrompt({
   output: {schema: DetectCyberbullyingFromTextOutputSchema},
   prompt: `You are an AI assistant specialized in detecting cyberbullying.
   
-  Evaluate the provided text within the context of the relationship between the sender and receiver.
-  
   ### CONTEXT:
   - Relationship Status: {{{relationshipType}}}
   - History of Interaction: {{{historyType}}}
   
-  ### REFERENCE EXAMPLES (Similar Contexts):
+  ### REFERENCE EXAMPLES (Few-Shot Context):
   {{#if examples}}
   {{#each examples}}
   - Example Text: "{{{this.text}}}"
@@ -71,11 +78,10 @@ const detectCyberbullyingPrompt = ai.definePrompt({
   "{{{text}}}"
 
   ### GUIDELINES:
-  1. Use a HIGHER hostility threshold for established "Friends" or "Close" relationships. Allow for casual banter, sarcasm, and mutual teasing unless it is clearly harmful, non-consensual, or escalates to severe harassment.
-  2. Use a STRICTER threshold for "Strangers" or "Acquaintances". Aggressive, unsolicited, or insulting language here is more likely to be bullying.
-  3. Look for signs of persistent harassment, physical threats, or systemic hate speech.
+  1. established "Friends": Higher tolerance for banter and teasing.
+  2. "Strangers/Acquaintances": Stricter threshold for unsolicited insults.
   
-  Return a JSON response with isCyberbullying (boolean), reasoning (string), and confidenceScore (0-1).
+  Return JSON: { isCyberbullying, reasoning, confidenceScore }
   `,
 });
 
