@@ -2,8 +2,8 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -34,21 +34,41 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
   console.log(`[DATABASE] Fetching relationship for: ${senderId} <-> ${receiverId}`);
   const relId = [senderId, receiverId].sort().join('_');
   const relRef = doc(db, "relationships", relId);
-  const relDoc = await getDoc(relRef);
+  
+  try {
+    const relDoc = await getDoc(relRef);
 
-  if (relDoc.exists()) {
-    console.log(`[DATABASE] Relationship found:`, relDoc.data());
-    return relDoc.data();
-  } else {
-    console.log(`[DATABASE] No relationship found. Creating default: Stranger/None`);
-    const initialData = {
-      interactionCount: 0,
-      relationshipType: 'Stranger',
-      historyType: 'None',
-      participants: [senderId, receiverId],
-      lastInteraction: new Date().toISOString()
-    };
-    await setDoc(relRef, initialData);
-    return initialData;
+    if (relDoc.exists()) {
+      console.log(`[DATABASE] Relationship found:`, relDoc.data());
+      return relDoc.data();
+    } else {
+      console.log(`[DATABASE] No relationship found. Creating default: Stranger/None`);
+      const initialData = {
+        interactionCount: 0,
+        relationshipType: 'Stranger',
+        historyType: 'None',
+        participants: [senderId, receiverId],
+        lastInteraction: new Date().toISOString()
+      };
+      
+      // Mutate without awaiting immediately
+      setDoc(relRef, initialData).catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: relRef.path,
+          operation: 'create',
+          requestResourceData: initialData
+        }));
+      });
+
+      return initialData;
+    }
+  } catch (error: any) {
+    if (error.code === 'permission-denied') {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: relRef.path,
+        operation: 'get'
+      }));
+    }
+    throw error;
   }
 }

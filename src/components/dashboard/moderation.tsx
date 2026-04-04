@@ -25,6 +25,7 @@ import {
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
+import { getOrCreateRelationship } from "@/lib/firebase";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date">) => void;
@@ -81,17 +82,18 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     console.log("[CLIENT] CONTEXT -> Sender:", user.uid, "Receiver:", receiverId);
-    console.log("[CLIENT] DATA TO PROCESS -> Text:", text || "None");
-    console.log("[CLIENT] DATA TO PROCESS -> File:", file?.name || "None");
 
     if (!text && (!file || file.size === 0)) {
-      console.error("[CLIENT] ERROR: No content provided.");
       setError("Please provide text, an image, or a video to analyze.");
       setIsLoading(false);
       return;
     }
 
     try {
+      // Fetch relationship context on client
+      console.log("[CLIENT] Fetching relationship context...");
+      const relationship = await getOrCreateRelationship(user.uid, receiverId);
+
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
       let mediaResult: DetectCyberbullyingFromTextOutput | undefined;
       let extractedText: string | undefined;
@@ -100,12 +102,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
         console.log("[CLIENT] FLOW: Starting Text Analysis with context...");
         textResult = await detectCyberbullyingFromText({ 
           text, 
-          senderId: user.uid, 
-          receiverId 
+          relationshipType: relationship.relationshipType as string,
+          historyType: relationship.historyType as string,
         });
-        console.log("[CLIENT] FLOW: Text Analysis Finished. Result:", textResult.isCyberbullying ? "FLAGGED" : "CLEAN");
         
-        await addActivity({
+        addActivity({
           type: "Content",
           details: `Text Analysis: ${text.substring(0, 30)}...`,
           status: textResult.isCyberbullying ? "Flagged" : "Monitored",
@@ -119,18 +120,16 @@ export default function Moderation({ addActivity }: ModerationProps) {
           { dataUri: filePreview }
         );
         extractedText = mediaAnalysis.text;
-        console.log("[CLIENT] FLOW: Text Extracted from Media:", extractedText);
 
         if (extractedText) {
-          console.log("[CLIENT] FLOW: Analyzing Extracted Text for Bullying with context...");
+          console.log("[CLIENT] FLOW: Analyzing Extracted Text for Bullying...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
-            senderId: user.uid,
-            receiverId
+            relationshipType: relationship.relationshipType as string,
+            historyType: relationship.historyType as string,
           });
-          console.log("[CLIENT] FLOW: Media Content Result:", mediaResult.isCyberbullying ? "FLAGGED" : "CLEAN");
           
-          await addActivity({
+          addActivity({
             type: "Content",
             details: `Media Analysis: ${extractedText.substring(0, 30)}...`,
             status: mediaResult.isCyberbullying ? "Flagged" : "Monitored",
@@ -140,10 +139,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       setResult({ textResult, mediaResult, extractedText });
-      console.log("[CLIENT] **************************************************");
-      console.log("[CLIENT] * UI UPDATED WITH FINAL RESULTS                  *");
-      console.log("[CLIENT] **************************************************\n");
-    } catch (e) {
+    } catch (e: any) {
       console.error("[CLIENT] CRITICAL ERROR IN HANDLESUBMIT:", e);
       setError("An error occurred during analysis. Please check your connection and try again.");
     } finally {

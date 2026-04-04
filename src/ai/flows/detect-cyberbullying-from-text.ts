@@ -9,12 +9,11 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import {getOrCreateRelationship} from '@/lib/firebase';
 
 const DetectCyberbullyingFromTextInputSchema = z.object({
   text: z.string().describe('The text content to analyze for cyberbullying.'),
-  senderId: z.string().describe('The ID of the user sending the message.'),
-  receiverId: z.string().describe('The ID of the user receiving the message.'),
+  relationshipType: z.string().describe('The type of relationship between sender and receiver.'),
+  historyType: z.string().describe('The history of interaction between sender and receiver.'),
 });
 export type DetectCyberbullyingFromTextInput = z.infer<
   typeof DetectCyberbullyingFromTextInputSchema
@@ -40,15 +39,14 @@ export async function detectCyberbullyingFromText(
 ): Promise<DetectCyberbullyingFromTextOutput> {
   console.log('\n\n==================================================');
   console.log('[SERVER: detectCyberbullyingFromText] >>> STARTING NEW ANALYSIS');
-  console.log('[SERVER: detectCyberbullyingFromText] STEP 1: RECEIVED INPUT:', input);
+  console.log('[SERVER: detectCyberbullyingFromText] STEP 1: RECEIVED INPUT');
   console.log('==================================================\n');
   
   try {
     const result = await detectCyberbullyingFromTextFlow(input);
     
     console.log('\n--------------------------------------------------');
-    console.log('[SERVER: detectCyberbullyingFromText] STEP 4: ANALYSIS COMPLETE');
-    console.log('[SERVER: detectCyberbullyingFromText] FINAL OUTPUT:', JSON.stringify(result, null, 2));
+    console.log('[SERVER: detectCyberbullyingFromText] STEP 2: ANALYSIS COMPLETE');
     console.log('--------------------------------------------------\n');
     return result;
   } catch (error) {
@@ -62,11 +60,7 @@ export async function detectCyberbullyingFromText(
 const detectCyberbullyingPrompt = ai.definePrompt({
   name: 'detectCyberbullyingPrompt',
   input: {
-    schema: z.object({
-      text: z.string(),
-      relationshipType: z.string(),
-      historyType: z.string(),
-    })
+    schema: DetectCyberbullyingFromTextInputSchema,
   },
   output: {schema: DetectCyberbullyingFromTextOutputSchema},
   prompt: `You are an AI assistant specialized in detecting cyberbullying.
@@ -81,13 +75,7 @@ const detectCyberbullyingPrompt = ai.definePrompt({
   1. If the relationship is "Friends" or "Close", allow for more casual language and banter unless it is clearly harmful.
   2. If the relationship is "Stranger", be stricter with aggressive or unsolicited language.
   3. Look for signs of harassment, threats, or hate speech.
-
-  Response in JSON:
-  {
-    "isCyberbullying": boolean,
-    "reason": string,
-    "confidenceScore": number
-  }`,
+  `,
 });
 
 const detectCyberbullyingFromTextFlow = ai.defineFlow(
@@ -97,17 +85,8 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     outputSchema: DetectCyberbullyingFromTextOutputSchema,
   },
   async input => {
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] STEP 2: FETCHING RELATIONSHIP CONTEXT...');
-    const relationship = await getOrCreateRelationship(input.senderId, input.receiverId);
-    
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] STEP 3: SENDING TO GEMINI AI WITH CONTEXT...');
-    const {output} = await detectCyberbullyingPrompt({
-      text: input.text,
-      relationshipType: relationship.relationshipType as string,
-      historyType: relationship.historyType as string,
-    });
-    
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] STEP 3.1: GEMINI AI RESPONDED SUCCESSFULLY.');
+    console.log('[SERVER: detectCyberbullyingFromTextFlow] SENDING TO GEMINI AI WITH CONTEXT...');
+    const {output} = await detectCyberbullyingPrompt(input);
     return output!;
   }
 );

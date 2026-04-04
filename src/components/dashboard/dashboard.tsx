@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { collection, addDoc, onSnapshot, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 import { type View, AppSidebar } from "@/components/layout/sidebar";
 import { AppHeader } from "@/components/layout/header";
@@ -44,26 +46,34 @@ export default function Dashboard() {
       where("userId", "==", user.uid)
     );
     
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log("[Dashboard] Firestore update received. Activity count:", querySnapshot.size);
-      const activitiesData: Activity[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.date && typeof data.date.toDate === 'function') {
-            activitiesData.push({
-            id: doc.id,
-            ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
-            } as Activity);
-        }
-      });
-      activitiesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setActivities(activitiesData);
-      setLoading(false);
-    }, (error) => {
-        console.error("[Dashboard] Error fetching activities: ", error);
+    const unsubscribe = onSnapshot(q, 
+      (querySnapshot) => {
+        console.log("[Dashboard] Firestore update received. Activity count:", querySnapshot.size);
+        const activitiesData: Activity[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.date && typeof data.date.toDate === 'function') {
+              activitiesData.push({
+              id: doc.id,
+              ...data,
+              date: (data.date as Timestamp).toDate().toISOString(),
+              } as Activity);
+          }
+        });
+        activitiesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setActivities(activitiesData);
         setLoading(false);
-    });
+      }, 
+      async (error: any) => {
+        if (error.code === 'permission-denied') {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'activities',
+            operation: 'list'
+          }));
+        }
+        setLoading(false);
+      }
+    );
 
     return () => {
       console.log("[Dashboard] Unsubscribing from activity feed.");
@@ -71,19 +81,23 @@ export default function Dashboard() {
     };
   }, [user]);
 
-  const addActivity = async (activity: Omit<Activity, "id" | "date">) => {
+  const addActivity = (activity: Omit<Activity, "id" | "date">) => {
      if (!user) return;
     console.log("[Dashboard] Adding new activity to Firestore:", activity);
-    try {
-      const docRef = await addDoc(collection(db, "activities"), {
-        ...activity,
-        date: new Date(),
-        userId: user.uid,
-      });
-      console.log("[Dashboard] Activity saved successfully with ID:", docRef.id);
-    } catch (error) {
-      console.error("[Dashboard] Error adding activity: ", error);
-    }
+    
+    const activityData = {
+      ...activity,
+      date: new Date(),
+      userId: user.uid,
+    };
+
+    addDoc(collection(db, "activities"), activityData).catch(async (error) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'activities',
+        operation: 'create',
+        requestResourceData: activityData
+      }));
+    });
   };
 
   const renderView = () => {
