@@ -7,15 +7,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged, firebaseSignOut, type User } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter, usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+const ADMIN_EMAILS = [
+  "sambitbhoumik01@gmail.com",
+  "pauladitya2017@gmail.com"
+];
+
 type UserProfile = {
   role: "superuser" | "user";
   email: string;
+  createdAt: string;
 };
 
 type AuthContextType = {
@@ -48,8 +54,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("[AUTH] Profile loaded:", profile.role);
             setUserProfile(profile);
           } else {
-            console.warn("[AUTH] No profile document found in Firestore.");
-            setUserProfile(null);
+            console.warn("[AUTH] No profile document found. Auto-creating profile...");
+            // Heal missing profile
+            const role = ADMIN_EMAILS.includes(authUser.email?.toLowerCase() || "") ? "superuser" : "user";
+            const newProfile: UserProfile = {
+              email: authUser.email || "",
+              role: role as "superuser" | "user",
+              createdAt: new Date().toISOString(),
+            };
+            
+            await setDoc(userDocRef, newProfile);
+            console.log("[AUTH] Profile created automatically for:", authUser.email);
+            setUserProfile(newProfile);
           }
           
           if (pathname === "/login" || pathname === "/signup") {
@@ -74,7 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      const { signOut: firebaseSignOutFn } = await import("firebase/auth");
+      await firebaseSignOutFn(auth);
       router.push("/login");
     } catch (error) {
       console.error("Error signing out:", error);
