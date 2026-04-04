@@ -25,6 +25,10 @@ import {
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
+import { getOrCreateRelationship, db } from "@/lib/firebase";
+import { collection, query, where, limit, getDocs } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date">) => void;
@@ -48,7 +52,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log("[CLIENT] >>> FILE SELECTED:", file.name, "TYPE:", file.type);
       setFileType(file.type);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -58,12 +61,41 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
   };
 
+  async function fetchContextData(senderId: string, receiverId: string) {
+    console.log("[CLIENT] STEP 3: FETCHING CONTEXT DATA (Relationship & Examples)");
+    
+    // 1. Get Relationship Metadata
+    const relationship = await getOrCreateRelationship(senderId, receiverId);
+    const relType = (relationship.relationshipType as string) || 'Stranger';
+    const histType = (relationship.historyType as string) || 'None';
+
+    // 2. Fetch Relevant Examples
+    console.log(`[CLIENT] Querying reference examples for: ${relType}`);
+    const examplesRef = collection(db, 'contextExamples');
+    const q = query(examplesRef, where('relationship', '==', relType), limit(3));
+    
+    let examples: any[] = [];
+    try {
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((doc) => {
+        examples.push(doc.data());
+      });
+    } catch (err: any) {
+      if (err.code === 'permission-denied') {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'contextExamples',
+          operation: 'list'
+        }));
+      }
+      throw err;
+    }
+
+    console.log(`[CLIENT] Found ${examples.length} reference examples.`);
+    return { relType, histType, examples };
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    console.log("\n[CLIENT] **************************************************");
-    console.log("[CLIENT] * ACTION: ANALYZE CONTENT (Step 1: UI Trigger)  *");
-    console.log("[CLIENT] **************************************************\n");
-    
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -79,8 +111,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
       return;
     }
 
-    console.log("[CLIENT] STEP 2: PREPARING PAYLOAD -> Sender:", user.uid, "Receiver:", receiverId);
-
     if (!text && (!file || file.size === 0)) {
       setError("Please provide text, an image, or a video to analyze.");
       setIsLoading(false);
@@ -88,16 +118,20 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     try {
+      // Fetch context data on client
+      const context = await fetchContextData(user.uid, receiverId);
+
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
       let mediaResult: DetectCyberbullyingFromTextOutput | undefined;
       let extractedText: string | undefined;
 
       if (text) {
-        console.log("[CLIENT] STEP 3A: STARTING TEXT FLOW...");
+        console.log("[CLIENT] STEP 4A: STARTING TEXT FLOW WITH CONTEXT...");
         textResult = await detectCyberbullyingFromText({ 
           text, 
-          senderId: user.uid,
-          receiverId: receiverId,
+          relationshipType: context.relType,
+          historyType: context.histType,
+          examples: context.examples,
         });
         
         addActivity({
@@ -109,18 +143,19 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
 
       if (file && file.size > 0 && filePreview) {
-        console.log("[CLIENT] STEP 3B: STARTING MEDIA VISION FLOW...");
+        console.log("[CLIENT] STEP 4B: STARTING MEDIA VISION FLOW...");
         const mediaAnalysis: ExtractTextFromMediaOutput = await extractTextFromMedia(
           { dataUri: filePreview }
         );
         extractedText = mediaAnalysis.text;
 
         if (extractedText) {
-          console.log("[CLIENT] STEP 4: ANALYZING MEDIA TEXT FOR BULLYING...");
+          console.log("[CLIENT] STEP 5: ANALYZING MEDIA TEXT WITH CONTEXT...");
           mediaResult = await detectCyberbullyingFromText({
             text: extractedText,
-            senderId: user.uid,
-            receiverId: receiverId,
+            relationshipType: context.relType,
+            historyType: context.histType,
+            examples: context.examples,
           });
           
           addActivity({
@@ -132,11 +167,11 @@ export default function Moderation({ addActivity }: ModerationProps) {
         }
       }
 
-      console.log("[CLIENT] STEP 5: RESULTS RECEIVED. UPDATING UI.");
       setResult({ textResult, mediaResult, extractedText });
     } catch (e: any) {
       console.error("[CLIENT] CRITICAL FAILURE DURING ANALYSIS:", e);
-      setError("An error occurred during analysis. Please check the logs.");
+      // Detailed error will be handled by FirebaseErrorListener if it's a permission issue
+      setError(e.message || "An error occurred during analysis.");
     } finally {
       setIsLoading(false);
     }

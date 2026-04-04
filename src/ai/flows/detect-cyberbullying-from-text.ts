@@ -9,13 +9,12 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import {getOrCreateRelationship, db} from '@/lib/firebase';
-import {collection, query, where, limit, getDocs} from 'firebase/firestore';
 
 const DetectCyberbullyingFromTextInputSchema = z.object({
   text: z.string().describe('The text content to analyze for cyberbullying.'),
-  senderId: z.string().describe('The ID of the user sending the content.'),
-  receiverId: z.string().describe('The ID of the user receiving the content.'),
+  relationshipType: z.string().describe('The type of relationship between sender and receiver.'),
+  historyType: z.string().describe('The history of interaction between users.'),
+  examples: z.array(z.any()).describe('Few-shot examples of similar interactions.'),
 });
 export type DetectCyberbullyingFromTextInput = z.infer<
   typeof DetectCyberbullyingFromTextInputSchema
@@ -46,12 +45,7 @@ export async function detectCyberbullyingFromText(
 const detectCyberbullyingPrompt = ai.definePrompt({
   name: 'detectCyberbullyingPrompt',
   input: {
-    schema: z.object({
-      text: z.string(),
-      relationshipType: z.string(),
-      historyType: z.string(),
-      examples: z.array(z.any()),
-    }),
+    schema: DetectCyberbullyingFromTextInputSchema,
   },
   output: {schema: DetectCyberbullyingFromTextOutputSchema},
   prompt: `You are an AI assistant specialized in detecting cyberbullying.
@@ -92,33 +86,7 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     outputSchema: DetectCyberbullyingFromTextOutputSchema,
   },
   async input => {
-    console.log('[SERVER: detectCyberbullyingFromTextFlow] Fetching relationship metadata...');
-    const relationship = await getOrCreateRelationship(input.senderId, input.receiverId);
-    
-    const relType = (relationship.relationshipType as string) || 'Stranger';
-    const histType = (relationship.historyType as string) || 'None';
-
-    console.log(`[SERVER: detectCyberbullyingFromTextFlow] Querying reference examples for: ${relType}`);
-    
-    // Fetch 3 most relevant examples from contextExamples
-    const examplesRef = collection(db, 'contextExamples');
-    const q = query(examplesRef, where('relationship', '==', relType), limit(3));
-    const querySnapshot = await getDocs(q);
-    
-    const examples: any[] = [];
-    querySnapshot.forEach((doc) => {
-      examples.push(doc.data());
-    });
-
-    console.log(`[SERVER: detectCyberbullyingFromTextFlow] Found ${examples.length} reference examples.`);
-
-    const {output} = await detectCyberbullyingPrompt({
-      text: input.text,
-      relationshipType: relType,
-      historyType: histType,
-      examples: examples,
-    });
-
+    const {output} = await detectCyberbullyingPrompt(input);
     return output!;
   }
 );
