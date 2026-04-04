@@ -1,0 +1,79 @@
+
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user roles and account details",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["user", "superuser"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "A log of automated detections and manual reports",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["Content", "User", "Report"] },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["Flagged", "Pending", "Monitored", "Action Taken"] },
+        "date": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "isCyberbullying": { "type": "boolean" },
+        "isHighRisk": { "type": "boolean" },
+        "isPotentialVictim": { "type": "boolean" }
+      },
+      "required": ["type", "details", "status", "userId"]
+    },
+    "Relationship": {
+      "title": "Relationship",
+      "description": "Metadata about interactions between two users",
+      "type": "object",
+      "properties": {
+        "interactionCount": { "type": "number" },
+        "relationshipType": { "type": "string" },
+        "historyType": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastInteraction": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants"]
+    },
+    "ContextExample": {
+      "title": "Context Example",
+      "description": "Reference examples for AI few-shot learning",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "relationship": { "type": "string" },
+        "history": { "type": "string" },
+        "label": { "type": "string" },
+        "sourceFile": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["password"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "#/backend/entities/UserProfile",
+      "description": "User profile access"
+    },
+    "/activities/{activityId}": {
+      "schema": "#/backend/entities/Activity",
+      "description": "Activity log access"
+    },
+    "/relationships/{relationshipId}": {
+      "schema": "#/backend/entities/Relationship",
+      "description": "User relationship metadata"
+    },
+    "/contextExamples/{exampleId}": {
+      "schema": "#/backend/entities/ContextExample",
+      "description": "Read-only access to training examples"
+    }
+  }
+}

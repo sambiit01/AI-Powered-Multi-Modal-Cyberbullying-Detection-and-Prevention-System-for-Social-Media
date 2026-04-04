@@ -1,3 +1,4 @@
+
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -29,6 +30,9 @@ export const db = getFirestore(app);
 /**
  * Fetches or creates a relationship document between two users.
  * Generates a unique ID by sorting the UIDs alphabetically.
+ * 
+ * Note: Security rules are being updated to allow authenticated users
+ * to read/write relationships where they are a participant.
  */
 export async function getOrCreateRelationship(senderId: string, receiverId: string) {
   console.log(`[DATABASE] Fetching relationship for: ${senderId} <-> ${receiverId}`);
@@ -51,7 +55,7 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
         lastInteraction: new Date().toISOString()
       };
       
-      // Mutate without awaiting immediately
+      // Mutate without awaiting immediately to maintain UI responsiveness
       setDoc(relRef, initialData).catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: relRef.path,
