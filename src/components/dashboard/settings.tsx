@@ -17,7 +17,7 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Loader2, Download, Database } from "lucide-react";
+import { Loader2, Download, Database, Save } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -34,22 +34,30 @@ export default function Settings() {
       try {
         const settingsRef = doc(db, "adminSettings", "global");
         const snap = await getDoc(settingsRef);
-        if (snap.exists() && isMounted) {
-          const data = snap.data();
-          setToxicityThreshold(data.sensitivityThreshold || 85);
-          setBullyingThreshold(data.banterTolerance || 75);
-          console.log("[SETTINGS] Loaded settings:", data);
+        
+        if (isMounted) {
+          if (snap.exists()) {
+            const data = snap.data();
+            console.log("[SETTINGS] Data found in Firestore:", data);
+            // Use ?? to allow 0 as a valid value
+            setToxicityThreshold(data.sensitivityThreshold ?? 85);
+            setBullyingThreshold(data.banterTolerance ?? 75);
+          } else {
+            console.log("[SETTINGS] No settings found, using defaults.");
+          }
+          setIsLoading(false);
         }
       } catch (err: any) {
         console.error("[SETTINGS] Load failed:", err);
-        if (err.code === "permission-denied") {
-          errorEmitter.emit("permission-error", new FirestorePermissionError({
-            path: "adminSettings/global",
-            operation: "get"
-          }));
+        if (isMounted) {
+          if (err.code === "permission-denied") {
+            errorEmitter.emit("permission-error", new FirestorePermissionError({
+              path: "adminSettings/global",
+              operation: "get"
+            }));
+          }
+          setIsLoading(false);
         }
-      } finally {
-        if (isMounted) setIsLoading(false);
       }
     }
     loadSettings();
@@ -58,7 +66,7 @@ export default function Settings() {
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    console.log("[SETTINGS] Persisting changes to Firestore...");
+    console.log("[SETTINGS] Saving changes:", { toxicityThreshold, bullyingThreshold });
     
     const settingsData = {
       sensitivityThreshold: toxicityThreshold,
@@ -66,24 +74,28 @@ export default function Settings() {
       updatedAt: new Date().toISOString()
     };
 
-    setDoc(doc(db, "adminSettings", "global"), settingsData)
-      .then(() => {
-        toast({
-          title: "Settings Saved",
-          description: "Global AI parameters have been updated and synced.",
-        });
-      })
-      .catch(async (err) => {
-        console.error("[SETTINGS] Save failed:", err);
-        errorEmitter.emit("permission-error", new FirestorePermissionError({
-          path: "adminSettings/global",
-          operation: "write",
-          requestResourceData: settingsData
-        }));
-      })
-      .finally(() => {
-        setIsSaving(false);
+    try {
+      await setDoc(doc(db, "adminSettings", "global"), settingsData);
+      console.log("[SETTINGS] Save successful");
+      toast({
+        title: "Settings Saved",
+        description: `Sensitivity: ${toxicityThreshold}%, Banter: ${bullyingThreshold}%`,
       });
+    } catch (err: any) {
+      console.error("[SETTINGS] Save failed:", err);
+      errorEmitter.emit("permission-error", new FirestorePermissionError({
+        path: "adminSettings/global",
+        operation: "write",
+        requestResourceData: settingsData
+      }));
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: "You might not have permission to change global settings.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleExportCSV = async () => {
@@ -101,7 +113,6 @@ export default function Settings() {
         return;
       }
 
-      // Define CSV headers based on standard contextExample structure
       const headers = ["text", "relationship", "interaction_history", "interaction_frequency", "label", "sourceFile", "uploadedAt"];
       
       const csvContent = [
@@ -109,7 +120,6 @@ export default function Settings() {
         ...records.map(record => {
           return headers.map(header => {
             let val = record[header] || "";
-            // Handle commas and quotes in text content
             if (typeof val === 'string') {
               val = `"${val.replace(/"/g, '""')}"`;
             }
@@ -118,7 +128,6 @@ export default function Settings() {
         })
       ].join("\n");
 
-      // Trigger download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -157,10 +166,9 @@ export default function Settings() {
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>System Settings</CardTitle>
+          <CardTitle>Global AI Configuration</CardTitle>
           <CardDescription>
-            Adjust the AI detection thresholds and other system parameters.
-            Higher sensitivity values make the detection more strict globally.
+            Adjust the AI detection thresholds. These values are synced across the entire platform.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -181,8 +189,7 @@ export default function Settings() {
               step={1}
             />
             <p className="text-sm text-muted-foreground">
-              Determines the required AI confidence level before flagging content. 
-              Higher values reduce "false positives" but might miss subtle bullying.
+              Required confidence level for AI to flag content. Higher = less aggressive flagging.
             </p>
           </div>
           <div className="space-y-4">
@@ -202,8 +209,7 @@ export default function Settings() {
               step={1}
             />
             <p className="text-sm text-muted-foreground">
-              Adjusts how much "rough" language is allowed between established friends. 
-              Higher tolerance means fewer flags for playful insults between close contacts.
+              How much "rough" talk is permitted between close friends. Higher = more permissive.
             </p>
           </div>
           
@@ -215,7 +221,7 @@ export default function Settings() {
                   Auto-Suspend Users
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Automatically suspend users who exceed thresholds multiple times.
+                  Automatically suspend users who exceed thresholds.
                 </p>
               </div>
               <Switch id="auto-suspend" />
@@ -226,7 +232,7 @@ export default function Settings() {
                   Notify Potential Victims
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Send automated messages and resources to users identified as potential victims.
+                  Send resources to users identified as potential victims.
                 </p>
               </div>
               <Switch id="auto-notify" defaultChecked />
@@ -243,7 +249,7 @@ export default function Settings() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Training Data Export</p>
                   <p className="text-xs text-muted-foreground">
-                    Download the full contextExamples dataset as a CSV for model training or audit.
+                    Download the contextExamples dataset as a CSV.
                   </p>
                 </div>
                 <Button 
@@ -254,7 +260,7 @@ export default function Settings() {
                   className="shrink-0"
                 >
                   {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                  Export to CSV
+                  Export CSV
                 </Button>
               </CardContent>
             </Card>
@@ -262,9 +268,9 @@ export default function Settings() {
         </CardContent>
       </Card>
       <div className="flex justify-end">
-        <Button onClick={handleSaveChanges} disabled={isSaving}>
-          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save Changes
+        <Button onClick={handleSaveChanges} disabled={isSaving} className="gap-2">
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save Configuration
         </Button>
       </div>
     </div>

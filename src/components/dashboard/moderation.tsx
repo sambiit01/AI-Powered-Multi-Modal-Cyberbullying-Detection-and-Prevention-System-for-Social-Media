@@ -74,7 +74,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
   async function fetchContextData(senderId: string, receiverId: string) {
     const relData = await getOrCreateRelationship(senderId, receiverId);
     
-    // These are explicitly fetched from the Relationship collection
     const relType = relData.relationshipType || 'Stranger';
     const histType = relData.historyType || 'Neutral';
     const freq = relData.interactionFrequency || 'Occasional';
@@ -105,8 +104,9 @@ export default function Moderation({ addActivity }: ModerationProps) {
       const settingsSnap = await getDoc(doc(db, "adminSettings", "global"));
       if (settingsSnap.exists()) {
         const data = settingsSnap.data();
-        sensitivityThreshold = data.sensitivityThreshold || 85;
-        banterTolerance = data.banterTolerance || 75;
+        sensitivityThreshold = data.sensitivityThreshold ?? 85;
+        banterTolerance = data.banterTolerance ?? 75;
+        console.log("[Moderation] Applied global settings:", { sensitivityThreshold, banterTolerance });
       }
     } catch (err) {
       console.warn("[Moderation] Using default settings due to fetch error:", err);
