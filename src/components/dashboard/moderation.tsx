@@ -99,14 +99,20 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     let sensitivityThreshold = 85;
+    let banterTolerance = 75;
+
     try {
       const settingsSnap = await getDoc(doc(db, "adminSettings", "global"));
       if (settingsSnap.exists()) {
-        sensitivityThreshold = settingsSnap.data().sensitivityThreshold || 85;
+        const data = settingsSnap.data();
+        sensitivityThreshold = data.sensitivityThreshold || 85;
+        banterTolerance = data.banterTolerance || 75;
       }
-    } catch (err) {}
+    } catch (err) {
+      console.warn("[Moderation] Using default settings due to fetch error:", err);
+    }
 
-    return { relType, histType, freq, isBursting, examples, sensitivityThreshold };
+    return { relType, histType, freq, isBursting, examples, sensitivityThreshold, banterTolerance };
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -141,7 +147,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
           interactionFrequency: ctx.freq,
           isBursting: ctx.isBursting,
           examples: ctx.examples,
-          sensitivityThreshold: ctx.sensitivityThreshold
+          sensitivityThreshold: ctx.sensitivityThreshold,
+          banterTolerance: ctx.banterTolerance
         });
         
         addActivity({
@@ -171,7 +178,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
             interactionFrequency: ctx.freq,
             isBursting: ctx.isBursting,
             examples: ctx.examples,
-            sensitivityThreshold: ctx.sensitivityThreshold
+            sensitivityThreshold: ctx.sensitivityThreshold,
+            banterTolerance: ctx.banterTolerance
           });
           
           addActivity({

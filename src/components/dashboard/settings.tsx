@@ -28,18 +28,20 @@ export default function Settings() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     async function loadSettings() {
       console.log("[SETTINGS] Loading global admin settings...");
       try {
         const settingsRef = doc(db, "adminSettings", "global");
         const snap = await getDoc(settingsRef);
-        if (snap.exists()) {
+        if (snap.exists() && isMounted) {
           const data = snap.data();
           setToxicityThreshold(data.sensitivityThreshold || 85);
           setBullyingThreshold(data.banterTolerance || 75);
           console.log("[SETTINGS] Loaded settings:", data);
         }
       } catch (err: any) {
+        console.error("[SETTINGS] Load failed:", err);
         if (err.code === "permission-denied") {
           errorEmitter.emit("permission-error", new FirestorePermissionError({
             path: "adminSettings/global",
@@ -47,15 +49,16 @@ export default function Settings() {
           }));
         }
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     }
     loadSettings();
+    return () => { isMounted = false; };
   }, []);
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    console.log("[SETTINGS] Saving changes to Firestore...");
+    console.log("[SETTINGS] Persisting changes to Firestore...");
     
     const settingsData = {
       sensitivityThreshold: toxicityThreshold,
@@ -67,10 +70,11 @@ export default function Settings() {
       .then(() => {
         toast({
           title: "Settings Saved",
-          description: "Global AI parameters have been updated.",
+          description: "Global AI parameters have been updated and synced.",
         });
       })
       .catch(async (err) => {
+        console.error("[SETTINGS] Save failed:", err);
         errorEmitter.emit("permission-error", new FirestorePermissionError({
           path: "adminSettings/global",
           operation: "write",
@@ -156,7 +160,7 @@ export default function Settings() {
           <CardTitle>System Settings</CardTitle>
           <CardDescription>
             Adjust the AI detection thresholds and other system parameters.
-            Higher sensitivity values make the detection more strict.
+            Higher sensitivity values make the detection more strict globally.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -177,7 +181,7 @@ export default function Settings() {
               step={1}
             />
             <p className="text-sm text-muted-foreground">
-              Determines the required AI confidence level before flagging. 
+              Determines the required AI confidence level before flagging content. 
               Higher values reduce "false positives" but might miss subtle bullying.
             </p>
           </div>
@@ -198,7 +202,8 @@ export default function Settings() {
               step={1}
             />
             <p className="text-sm text-muted-foreground">
-              Adjusts how much "hostile" language is allowed between established friends before being flagged.
+              Adjusts how much "rough" language is allowed between established friends. 
+              Higher tolerance means fewer flags for playful insults between close contacts.
             </p>
           </div>
           

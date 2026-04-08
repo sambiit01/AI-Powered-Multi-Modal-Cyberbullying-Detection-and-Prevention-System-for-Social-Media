@@ -15,6 +15,7 @@ const DetectCyberbullyingFromTextInputSchema = z.object({
   isBursting: z.boolean().describe('Whether the sender is flooding messages without response.'),
   examples: z.array(z.any()).describe('Few-shot examples matching the relationship context.'),
   sensitivityThreshold: z.number().describe('The required confidence score percentage (0-100).'),
+  banterTolerance: z.number().describe('The tolerance for hostile language between friends (0-100).'),
 });
 export type DetectCyberbullyingFromTextInput = z.infer<
   typeof DetectCyberbullyingFromTextInputSchema
@@ -34,6 +35,8 @@ export async function detectCyberbullying(
 ): Promise<DetectCyberbullyingFromTextOutput> {
   console.log('[SERVER: detectCyberbullying] >>> STARTING BEHAVIORAL ANALYSIS');
   console.log('[SERVER: detectCyberbullying] BURSTING MODE:', input.isBursting);
+  console.log('[SERVER: detectCyberbullying] SENSITIVITY:', input.sensitivityThreshold);
+  console.log('[SERVER: detectCyberbullying] BANTER TOLERANCE:', input.banterTolerance);
   
   const result = await detectCyberbullyingFromTextFlow(input);
 
@@ -83,6 +86,10 @@ const detectCyberbullyingPrompt = ai.definePrompt({
   - Interaction Frequency: {{{interactionFrequency}}}
   - Bursting Mode: {{#if isBursting}}ACTIVE (Sender is flooding messages){{else}}Inactive{{/if}}
   
+  ### SYSTEM PARAMETERS:
+  - Sensitivity Threshold: {{{sensitivityThreshold}}}% (Higher = stricter)
+  - Banter Tolerance: {{{banterTolerance}}}% (Higher = more tolerant of rough talk between friends)
+
   ### REFERENCE EXAMPLES:
   {{#if examples}}
   {{#each examples}}
@@ -98,7 +105,7 @@ const detectCyberbullyingPrompt = ai.definePrompt({
   ### STRICT MODERATION GUIDELINES:
   1. **Bursting Mode Warning**: If Bursting Mode is ACTIVE, the sender is sending many messages without a response. This is a high-risk indicator of harassment. Lower your tolerance significantly and be much stricter.
   2. **Stranger Threshold**: If relationship is 'Stranger', even mild insults should be flagged.
-  3. **Friendship Context**: If relationship is 'Close Friend' and history is 'Friendly', allow for playful banter unless it involves genuine threats.
+  3. **Friendship Context**: If relationship is 'Close Friend' and history is 'Friendly', allow for playful banter. Use the Banter Tolerance ({{{banterTolerance}}}%) to adjust your sensitivity. A higher percentage means you should be MORE tolerant of rough language between established friends.
 
   Return JSON: { isCyberbullying, reasoning, confidenceScore }
   `,
