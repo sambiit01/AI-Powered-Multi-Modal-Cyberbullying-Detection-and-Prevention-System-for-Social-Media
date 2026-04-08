@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -18,23 +19,35 @@
       "properties": {
         "type": { "type": "string", "enum": ["Content", "User", "Report"] },
         "details": { "type": "string" },
-        "status": { "type": "string", "enum": ["Flagged", "Pending", "Monitored", "Action Taken"] },
+        "status": { "type": "string", "enum": ["Flagged", "Pending", "Safe", "Action Taken"] },
         "date": { "type": "string", "format": "date-time" },
         "userId": { "type": "string" },
         "isCyberbullying": { "type": "boolean" },
         "isHighRisk": { "type": "boolean" },
-        "isPotentialVictim": { "type": "boolean" }
+        "isPotentialVictim": { "type": "boolean" },
+        "reasoning": { "type": "string" },
+        "originalText": { "type": "string" },
+        "relType": { "type": "string" },
+        "histType": { "type": "string" },
+        "freq": { "type": "string" }
       },
       "required": ["type", "details", "status", "userId"]
     },
     "Relationship": {
       "title": "Relationship",
-      "description": "Metadata about interactions between two users",
+      "description": "Metadata about interactions between two users, including behavioral metrics",
       "type": "object",
       "properties": {
         "interactionCount": { "type": "number" },
         "relationshipType": { "type": "string" },
         "historyType": { "type": "string" },
+        "interactionFrequency": { "type": "string" },
+        "isBursting": { "type": "boolean", "description": "True if a user is flooding messages without response" },
+        "rollingSentimentScore": { "type": "number" },
+        "messageTimestamps": { 
+          "type": "object", 
+          "description": "Map of userId to array of recent interaction timestamps"
+        },
         "participants": { "type": "array", "items": { "type": "string" } },
         "lastInteraction": { "type": "string", "format": "date-time" }
       },
@@ -47,7 +60,8 @@
       "properties": {
         "text": { "type": "string" },
         "relationship": { "type": "string" },
-        "history": { "type": "string" },
+        "interaction_history": { "type": "string" },
+        "interaction_frequency": { "type": "string" },
         "label": { "type": "string" },
         "sourceFile": { "type": "string" },
         "uploadedAt": { "type": "string", "format": "date-time" }
