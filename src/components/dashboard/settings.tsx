@@ -14,10 +14,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download, Database } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -25,6 +25,7 @@ export default function Settings() {
   const [bullyingThreshold, setBullyingThreshold] = useState(75);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
@@ -79,6 +80,65 @@ export default function Settings() {
       .finally(() => {
         setIsSaving(false);
       });
+  };
+
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "contextExamples"));
+      const records = querySnapshot.docs.map(doc => doc.data());
+
+      if (records.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No Data",
+          description: "There are no context examples to export.",
+        });
+        return;
+      }
+
+      // Define CSV headers based on standard contextExample structure
+      const headers = ["text", "relationship", "interaction_history", "interaction_frequency", "label", "sourceFile", "uploadedAt"];
+      
+      const csvContent = [
+        headers.join(","),
+        ...records.map(record => {
+          return headers.map(header => {
+            let val = record[header] || "";
+            // Handle commas and quotes in text content
+            if (typeof val === 'string') {
+              val = `"${val.replace(/"/g, '""')}"`;
+            }
+            return val;
+          }).join(",");
+        })
+      ].join("\n");
+
+      // Trigger download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `shieldai_context_examples_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export Complete",
+        description: `Successfully exported ${records.length} records.`,
+      });
+    } catch (err: any) {
+      console.error("[SETTINGS] Export error:", err);
+      toast({
+        variant: "destructive",
+        title: "Export Failed",
+        description: err.message || "An error occurred during CSV generation.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   if (isLoading) {
@@ -141,6 +201,7 @@ export default function Settings() {
               Adjusts how much "hostile" language is allowed between established friends before being flagged.
             </p>
           </div>
+          
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Automations</h3>
             <div className="flex items-center justify-between rounded-lg border p-4">
@@ -165,6 +226,33 @@ export default function Settings() {
               </div>
               <Switch id="auto-notify" defaultChecked />
             </div>
+          </div>
+
+          <div className="pt-6 border-t">
+            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+              <Database className="h-5 w-5 text-muted-foreground" />
+              Data Management
+            </h3>
+            <Card className="bg-muted/30">
+              <CardContent className="pt-6 flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Training Data Export</p>
+                  <p className="text-xs text-muted-foreground">
+                    Download the full contextExamples dataset as a CSV for model training or audit.
+                  </p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleExportCSV} 
+                  disabled={isExporting}
+                  className="shrink-0"
+                >
+                  {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                  Export to CSV
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </CardContent>
       </Card>
