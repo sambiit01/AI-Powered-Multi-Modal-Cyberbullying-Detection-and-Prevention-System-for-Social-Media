@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Detects cyberbullying from text-based content with relationship context, 
@@ -56,6 +55,26 @@ const detectCyberbullyingPrompt = ai.definePrompt({
     schema: DetectCyberbullyingFromTextInputSchema,
   },
   output: {schema: DetectCyberbullyingFromTextOutputSchema},
+  config: {
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_NONE',
+      },
+    ],
+  },
   prompt: `You are an expert AI moderator specializing in cyberbullying detection.
   
   ### BEHAVIORAL CONTEXT:
@@ -93,6 +112,9 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await detectCyberbullyingPrompt(input);
+    if (!output) {
+      throw new Error('The AI model failed to return a result. This may be due to safety filters blocking the content.');
+    }
     return output!;
   }
 );

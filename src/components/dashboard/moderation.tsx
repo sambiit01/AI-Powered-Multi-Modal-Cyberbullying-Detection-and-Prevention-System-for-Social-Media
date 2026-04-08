@@ -201,7 +201,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
         isBursting: ctx.isBursting
       });
     } catch (e: any) {
-      setError(e.message || "An error occurred.");
+      console.error("[Moderation] Analysis error:", e);
+      setError(e.message || "An unexpected error occurred during analysis.");
     } finally {
       setIsLoading(false);
     }
@@ -301,6 +302,20 @@ export default function Moderation({ addActivity }: ModerationProps) {
           </CardFooter>
         </form>
       </Card>
+
+      {error && (
+        <Card className="border-destructive animate-in fade-in slide-in-from-top-2">
+          <CardHeader className="flex flex-row items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-destructive" />
+            <div>
+              <CardTitle className="text-destructive font-semibold">Analysis Failed</CardTitle>
+              <CardDescription className="text-destructive/80">
+                {error}
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
 
       {result && (
         <Card className="animate-in fade-in slide-in-from-bottom-2 border-primary/20 shadow-lg">
