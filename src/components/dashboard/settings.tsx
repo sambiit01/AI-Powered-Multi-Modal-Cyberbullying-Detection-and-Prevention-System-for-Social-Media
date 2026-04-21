@@ -48,7 +48,7 @@ export default function Settings() {
         
         if (globalSnap.exists()) {
           const gData = globalSnap.data() as GlobalConfig;
-          activeProfile = gData.defaultProfileId;
+          activeProfile = gData.defaultProfileId || "standard";
           if (isMounted) setDefaultProfileId(activeProfile);
         }
 
@@ -168,6 +168,9 @@ export default function Settings() {
     );
   }
 
+  const safeProfileName = defaultProfileId || "standard";
+  const formattedProfileName = safeProfileName.charAt(0).toUpperCase() + safeProfileName.slice(1);
+
   return (
     <div className="grid gap-6">
       <Card>
@@ -206,7 +209,7 @@ export default function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Profile Tuning: {defaultProfileId.charAt(0).toUpperCase() + defaultProfileId.slice(1)}</CardTitle>
+          <CardTitle>Profile Tuning: {formattedProfileName}</CardTitle>
           <CardDescription>
             Adjust thresholds for the currently selected active profile.
           </CardDescription>
