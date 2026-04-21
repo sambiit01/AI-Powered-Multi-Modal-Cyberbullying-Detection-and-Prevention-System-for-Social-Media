@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Detects cyberbullying from text-based content with relationship context, 
@@ -41,6 +42,8 @@ export async function detectCyberbullying(
   const result = await detectCyberbullyingFromTextFlow(input);
 
   const thresholdAsDecimal = input.sensitivityThreshold / 100;
+  console.log(`SHIELDAI_DEBUG: Effective Threshold ${thresholdAsDecimal}`);
+
   if (result.isCyberbullying && result.confidenceScore < thresholdAsDecimal) {
     return {
       ...result,

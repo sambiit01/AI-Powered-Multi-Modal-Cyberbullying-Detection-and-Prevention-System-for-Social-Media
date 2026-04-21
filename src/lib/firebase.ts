@@ -48,15 +48,19 @@ export async function getProfileSettings(profileId: string = 'standard'): Promis
   try {
     const profileSnap = await getDoc(profileRef);
     if (profileSnap.exists()) {
-      return profileSnap.data() as AdminSettings;
+      const data = profileSnap.data() as AdminSettings;
+      console.log(`SHIELDAI_DEBUG: Fetched Profile ${profileId} with Sensitivity ${data.sensitivityThreshold}`);
+      return data;
     } else {
       console.log(`[DATABASE] Profile '${profileId}' not found. Returning defaults.`);
-      return {
+      const defaults = {
         profileType: profileId,
         sensitivityThreshold: 85,
         banterTolerance: 75,
         updatedAt: new Date().toISOString()
       };
+      console.log(`SHIELDAI_DEBUG: Fetched Profile ${profileId} with Sensitivity ${defaults.sensitivityThreshold} (DEFAULT)`);
+      return defaults;
     }
   } catch (error: any) {
     if (error.code === 'permission-denied') {
@@ -107,7 +111,7 @@ function calculateIsBursting(timestamps: { [uid: string]: number[] }, senderId: 
     const twoMinutesAgo = now - 120000;
     
     // Check if the 10th most recent message was sent within 2 minutes
-    // In our sliced(0,10) array, index 9 is the 10th oldest message in that window.
+    // senderTimestamps is sliced(0,10) where [0] is newest, [9] is oldest in that window
     const tenthMessageTs = senderTimestamps[9] || 0;
     const sentTenInTwoMins = tenthMessageTs > twoMinutesAgo;
     
