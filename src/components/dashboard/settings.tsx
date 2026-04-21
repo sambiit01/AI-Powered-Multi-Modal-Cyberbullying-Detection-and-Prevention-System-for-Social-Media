@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Switch } from "@/components/ui/switch";
 import { db, getProfileSettings, type GlobalConfig } from "@/lib/firebase";
 import { doc, setDoc, collection, getDocs, getDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -31,17 +30,16 @@ export default function Settings() {
   const { toast } = useToast();
   const [toxicityThreshold, setToxicityThreshold] = useState(85);
   const [bullyingThreshold, setBullyingThreshold] = useState(75);
-  const [defaultProfileId, setDefaultProfileId] = useState("standard");
+  const [defaultProfileId, setDefaultProfileId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  // 1. Initial Load: Fetch Global Config and Active Thresholds
   useEffect(() => {
-    let isMounted = true;
-    async function loadSettings() {
-      console.log("[SETTINGS] Loading configurations...");
+    async function loadGlobalConfig() {
+      console.log("[SETTINGS] Loading global configurations...");
       try {
-        // 1. Fetch Global Config
         const globalRef = doc(db, "adminSettings", "global");
         const globalSnap = await getDoc(globalRef);
         let activeProfile = "standard";
@@ -49,27 +47,36 @@ export default function Settings() {
         if (globalSnap.exists()) {
           const gData = globalSnap.data() as GlobalConfig;
           activeProfile = gData.defaultProfileId || "standard";
-          if (isMounted) setDefaultProfileId(activeProfile);
         }
-
-        // 2. Fetch Active Profile Settings
-        const data = await getProfileSettings(activeProfile);
         
-        if (isMounted) {
-          setToxicityThreshold(data.sensitivityThreshold ?? 85);
-          setBullyingThreshold(data.banterTolerance ?? 75);
-          setIsLoading(false);
-        }
+        setDefaultProfileId(activeProfile);
+        // Thresholds will be loaded by the second useEffect watching defaultProfileId
       } catch (err: any) {
-        console.error("[SETTINGS] Load failed:", err);
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        console.error("[SETTINGS] Global load failed:", err);
+        setDefaultProfileId("standard");
       }
     }
-    loadSettings();
-    return () => { isMounted = false; };
+    loadGlobalConfig();
   }, []);
+
+  // 2. Profile Sync: Fetch specific thresholds whenever the selected profile changes
+  useEffect(() => {
+    if (!defaultProfileId) return;
+
+    async function syncProfileThresholds() {
+      console.log(`[SETTINGS] Syncing thresholds for profile: ${defaultProfileId}`);
+      try {
+        const data = await getProfileSettings(defaultProfileId);
+        setToxicityThreshold(data.sensitivityThreshold ?? 85);
+        setBullyingThreshold(data.banterTolerance ?? 75);
+        setIsLoading(false);
+      } catch (err: any) {
+        console.error(`[SETTINGS] Profile sync failed for ${defaultProfileId}:`, err);
+        setIsLoading(false);
+      }
+    }
+    syncProfileThresholds();
+  }, [defaultProfileId]);
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
@@ -160,7 +167,7 @@ export default function Settings() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !defaultProfileId) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -200,7 +207,7 @@ export default function Settings() {
             </div>
             <div className="p-3 bg-muted/50 rounded-md border flex items-center">
               <p className="text-xs text-muted-foreground italic">
-                Changing this will immediately affect AI sensitivity across the platform.
+                Changing the selection will load that profile's custom thresholds below.
               </p>
             </div>
           </div>
