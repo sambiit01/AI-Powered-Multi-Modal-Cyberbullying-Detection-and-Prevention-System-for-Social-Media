@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -13,8 +14,8 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
+import { db, getProfileSettings } from "@/lib/firebase";
+import { doc, setDoc, collection, getDocs } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { Loader2, Download, Database, Save } from "lucide-react";
@@ -30,32 +31,18 @@ export default function Settings() {
   useEffect(() => {
     let isMounted = true;
     async function loadSettings() {
-      console.log("[SETTINGS] Loading global admin settings...");
+      console.log("[SETTINGS] Loading standard moderation profile...");
       try {
-        const settingsRef = doc(db, "adminSettings", "global");
-        const snap = await getDoc(settingsRef);
+        const data = await getProfileSettings('standard');
         
         if (isMounted) {
-          if (snap.exists()) {
-            const data = snap.data();
-            console.log("[SETTINGS] Data found in Firestore:", data);
-            // Use ?? to allow 0 as a valid value
-            setToxicityThreshold(data.sensitivityThreshold ?? 85);
-            setBullyingThreshold(data.banterTolerance ?? 75);
-          } else {
-            console.log("[SETTINGS] No settings found, using defaults.");
-          }
+          setToxicityThreshold(data.sensitivityThreshold ?? 85);
+          setBullyingThreshold(data.banterTolerance ?? 75);
           setIsLoading(false);
         }
       } catch (err: any) {
         console.error("[SETTINGS] Load failed:", err);
         if (isMounted) {
-          if (err.code === "permission-denied") {
-            errorEmitter.emit("permission-error", new FirestorePermissionError({
-              path: "adminSettings/global",
-              operation: "get"
-            }));
-          }
           setIsLoading(false);
         }
       }
@@ -66,32 +53,34 @@ export default function Settings() {
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    console.log("[SETTINGS] Saving changes:", { toxicityThreshold, bullyingThreshold });
+    console.log("[SETTINGS] Saving profile changes:", { toxicityThreshold, bullyingThreshold });
     
     const settingsData = {
+      profileType: "standard",
       sensitivityThreshold: toxicityThreshold,
       banterTolerance: bullyingThreshold,
       updatedAt: new Date().toISOString()
     };
 
     try {
-      await setDoc(doc(db, "adminSettings", "global"), settingsData);
+      // Save to the 'standard' profile in moderationProfiles collection
+      await setDoc(doc(db, "moderationProfiles", "standard"), settingsData);
       console.log("[SETTINGS] Save successful");
       toast({
-        title: "Settings Saved",
-        description: `Sensitivity: ${toxicityThreshold}%, Banter: ${bullyingThreshold}%`,
+        title: "Profile Saved",
+        description: `Standard Profile - Sensitivity: ${toxicityThreshold}%, Banter: ${bullyingThreshold}%`,
       });
     } catch (err: any) {
       console.error("[SETTINGS] Save failed:", err);
       errorEmitter.emit("permission-error", new FirestorePermissionError({
-        path: "adminSettings/global",
+        path: "moderationProfiles/standard",
         operation: "write",
         requestResourceData: settingsData
       }));
       toast({
         variant: "destructive",
         title: "Save Failed",
-        description: "You might not have permission to change global settings.",
+        description: "You might not have permission to change moderation profiles.",
       });
     } finally {
       setIsSaving(false);
@@ -166,9 +155,9 @@ export default function Settings() {
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Global AI Configuration</CardTitle>
+          <CardTitle>Moderation Profile: Standard</CardTitle>
           <CardDescription>
-            Adjust the AI detection thresholds. These values are synced across the entire platform.
+            Adjust the AI detection thresholds for the standard moderation profile.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -270,7 +259,7 @@ export default function Settings() {
       <div className="flex justify-end">
         <Button onClick={handleSaveChanges} disabled={isSaving} className="gap-2">
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save Configuration
+          Save Profile
         </Button>
       </div>
     </div>

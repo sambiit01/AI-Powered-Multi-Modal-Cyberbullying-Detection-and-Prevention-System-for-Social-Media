@@ -69,13 +69,15 @@
     },
     "AdminSettings": {
       "title": "Admin Settings",
-      "description": "Global system configurations for AI sensitivity and behavior",
+      "description": "System configurations for AI sensitivity and behavior per profile",
       "type": "object",
       "properties": {
+        "profileType": { "type": "string", "description": "The name of the moderation profile (e.g., standard, strict, lenient)" },
         "sensitivityThreshold": { "type": "number", "description": "0-100 score" },
         "banterTolerance": { "type": "number", "description": "0-100 score" },
         "updatedAt": { "type": "string", "format": "date-time" }
-      }
+      },
+      "required": ["profileType", "sensitivityThreshold", "banterTolerance"]
     }
   },
   "auth": {
@@ -98,9 +100,9 @@
       "schema": "#/backend/entities/ContextExample",
       "description": "Read-only access to training examples"
     },
-    "/adminSettings/{settingId}": {
+    "/moderationProfiles/{profileId}": {
       "schema": "#/backend/entities/AdminSettings",
-      "description": "Global admin configuration"
+      "description": "Moderation profile configurations"
     }
   }
 }

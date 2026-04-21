@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -25,12 +26,11 @@ import {
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { getOrCreateRelationship, db, updateRelationshipBehavior } from "@/lib/firebase";
-import { collection, query, where, limit, getDocs, doc, getDoc, addDoc } from "firebase/firestore";
+import { getOrCreateRelationship, db, updateRelationshipBehavior, getProfileSettings } from "@/lib/firebase";
+import { collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { useToast } from "@/hooks/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date" | "userId">) => void;
@@ -97,19 +97,17 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
     }
 
+    // Fetch settings from the 'standard' moderation profile
     let sensitivityThreshold = 85;
     let banterTolerance = 75;
 
     try {
-      const settingsSnap = await getDoc(doc(db, "adminSettings", "global"));
-      if (settingsSnap.exists()) {
-        const data = settingsSnap.data();
-        sensitivityThreshold = data.sensitivityThreshold ?? 85;
-        banterTolerance = data.banterTolerance ?? 75;
-        console.log("[Moderation] Applied global settings:", { sensitivityThreshold, banterTolerance });
-      }
+      const settings = await getProfileSettings('standard');
+      sensitivityThreshold = settings.sensitivityThreshold;
+      banterTolerance = settings.banterTolerance;
+      console.log("[Moderation] Applied standard profile settings:", { sensitivityThreshold, banterTolerance });
     } catch (err) {
-      console.warn("[Moderation] Using default settings due to fetch error:", err);
+      console.warn("[Moderation] Using default settings due to profile fetch error:", err);
     }
 
     return { relType, histType, freq, isBursting, examples, sensitivityThreshold, banterTolerance };

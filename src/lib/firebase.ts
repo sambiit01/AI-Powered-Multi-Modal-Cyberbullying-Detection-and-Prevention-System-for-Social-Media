@@ -28,6 +28,48 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 /**
+ * Interface for Admin/Moderation Settings
+ */
+export interface AdminSettings {
+  profileType: string;
+  sensitivityThreshold: number;
+  banterTolerance: number;
+  updatedAt: string;
+}
+
+/**
+ * Fetches moderation settings for a specific profile.
+ * Defaults to 'standard' if no profileId is provided.
+ */
+export async function getProfileSettings(profileId: string = 'standard'): Promise<AdminSettings> {
+  console.log(`[DATABASE] Fetching moderation profile: ${profileId}`);
+  const profileRef = doc(db, "moderationProfiles", profileId);
+  
+  try {
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists()) {
+      return profileSnap.data() as AdminSettings;
+    } else {
+      console.log(`[DATABASE] Profile '${profileId}' not found. Returning defaults.`);
+      return {
+        profileType: profileId,
+        sensitivityThreshold: 85,
+        banterTolerance: 75,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  } catch (error: any) {
+    if (error.code === 'permission-denied') {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: profileRef.path,
+        operation: 'get'
+      }));
+    }
+    throw error;
+  }
+}
+
+/**
  * Maps interaction count to relationship level.
  */
 function calculateRelationshipLevel(totalCount: number, isBidirectional: boolean): string {
@@ -65,7 +107,7 @@ function calculateIsBursting(timestamps: { [uid: string]: number[] }, senderId: 
     const twoMinutesAgo = now - 120000;
     
     // Check if the 10th most recent message was sent within 2 minutes
-    // Note: since we use [now, ...prev].slice(0,10), the 10th message is at index 9
+    // In our sliced(0,10) array, index 9 is the 10th oldest message in that window.
     const tenthMessageTs = senderTimestamps[9] || 0;
     const sentTenInTwoMins = tenthMessageTs > twoMinutesAgo;
     
