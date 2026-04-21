@@ -14,16 +14,24 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { db, getProfileSettings } from "@/lib/firebase";
-import { doc, setDoc, collection, getDocs } from "firebase/firestore";
+import { db, getProfileSettings, type GlobalConfig } from "@/lib/firebase";
+import { doc, setDoc, collection, getDocs, getDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Loader2, Download, Database, Save } from "lucide-react";
+import { Loader2, Download, Database, Save, Eye } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Settings() {
   const { toast } = useToast();
   const [toxicityThreshold, setToxicityThreshold] = useState(85);
   const [bullyingThreshold, setBullyingThreshold] = useState(75);
+  const [defaultProfileId, setDefaultProfileId] = useState("standard");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -31,9 +39,21 @@ export default function Settings() {
   useEffect(() => {
     let isMounted = true;
     async function loadSettings() {
-      console.log("[SETTINGS] Loading standard moderation profile...");
+      console.log("[SETTINGS] Loading configurations...");
       try {
-        const data = await getProfileSettings('standard');
+        // 1. Fetch Global Config
+        const globalRef = doc(db, "adminSettings", "global");
+        const globalSnap = await getDoc(globalRef);
+        let activeProfile = "standard";
+        
+        if (globalSnap.exists()) {
+          const gData = globalSnap.data() as GlobalConfig;
+          activeProfile = gData.defaultProfileId;
+          if (isMounted) setDefaultProfileId(activeProfile);
+        }
+
+        // 2. Fetch Active Profile Settings
+        const data = await getProfileSettings(activeProfile);
         
         if (isMounted) {
           setToxicityThreshold(data.sensitivityThreshold ?? 85);
@@ -53,35 +73,37 @@ export default function Settings() {
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    console.log("[SETTINGS] Saving profile changes:", { toxicityThreshold, bullyingThreshold });
     
-    const settingsData = {
-      profileType: "standard",
+    const profileData = {
+      profileType: defaultProfileId,
       sensitivityThreshold: toxicityThreshold,
       banterTolerance: bullyingThreshold,
       updatedAt: new Date().toISOString()
     };
 
+    const globalData = {
+      defaultProfileId: defaultProfileId,
+      updatedAt: new Date().toISOString()
+    };
+
     try {
-      // Save to the 'standard' profile in moderationProfiles collection
-      await setDoc(doc(db, "moderationProfiles", "standard"), settingsData);
-      console.log("[SETTINGS] Save successful");
+      // 1. Save Global config
+      await setDoc(doc(db, "adminSettings", "global"), globalData);
+      
+      // 2. Save active profile data
+      await setDoc(doc(db, "moderationProfiles", defaultProfileId), profileData);
+      
       toast({
-        title: "Profile Saved",
-        description: `Standard Profile - Sensitivity: ${toxicityThreshold}%, Banter: ${bullyingThreshold}%`,
+        title: "Settings Saved",
+        description: `Lens: ${defaultProfileId} | Sensitivity: ${toxicityThreshold}%`,
       });
     } catch (err: any) {
       console.error("[SETTINGS] Save failed:", err);
       errorEmitter.emit("permission-error", new FirestorePermissionError({
-        path: "moderationProfiles/standard",
+        path: "adminSettings/global",
         operation: "write",
-        requestResourceData: settingsData
+        requestResourceData: globalData
       }));
-      toast({
-        variant: "destructive",
-        title: "Save Failed",
-        description: "You might not have permission to change moderation profiles.",
-      });
     } finally {
       setIsSaving(false);
     }
@@ -133,11 +155,6 @@ export default function Settings() {
       });
     } catch (err: any) {
       console.error("[SETTINGS] Export error:", err);
-      toast({
-        variant: "destructive",
-        title: "Export Failed",
-        description: err.message || "An error occurred during CSV generation.",
-      });
     } finally {
       setIsExporting(false);
     }
@@ -155,9 +172,43 @@ export default function Settings() {
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Moderation Profile: Standard</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5 text-primary" />
+            Global Moderation Lens
+          </CardTitle>
           <CardDescription>
-            Adjust the AI detection thresholds for the standard moderation profile.
+            Select the active moderation personality for the entire system.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="lens-select">Active Profile</Label>
+              <Select value={defaultProfileId} onValueChange={setDefaultProfileId}>
+                <SelectTrigger id="lens-select">
+                  <SelectValue placeholder="Select a lens" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard (Balanced)</SelectItem>
+                  <SelectItem value="guardian">Guardian (Strict/Safe)</SelectItem>
+                  <SelectItem value="professional">Professional (Neutral/Formal)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-md border flex items-center">
+              <p className="text-xs text-muted-foreground italic">
+                Changing this will immediately affect AI sensitivity across the platform.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Profile Tuning: {defaultProfileId.charAt(0).toUpperCase() + defaultProfileId.slice(1)}</CardTitle>
+          <CardDescription>
+            Adjust thresholds for the currently selected active profile.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -202,32 +253,6 @@ export default function Settings() {
             </p>
           </div>
           
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Automations</h3>
-            <div className="flex items-center justify-between rounded-lg border p-4">
-              <div>
-                <Label htmlFor="auto-suspend" className="font-semibold">
-                  Auto-Suspend Users
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Automatically suspend users who exceed thresholds.
-                </p>
-              </div>
-              <Switch id="auto-suspend" />
-            </div>
-             <div className="flex items-center justify-between rounded-lg border p-4">
-              <div>
-                <Label htmlFor="auto-notify" className="font-semibold">
-                  Notify Potential Victims
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Send resources to users identified as potential victims.
-                </p>
-              </div>
-              <Switch id="auto-notify" defaultChecked />
-            </div>
-          </div>
-
           <div className="pt-6 border-t">
             <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
               <Database className="h-5 w-5 text-muted-foreground" />
@@ -259,7 +284,7 @@ export default function Settings() {
       <div className="flex justify-end">
         <Button onClick={handleSaveChanges} disabled={isSaving} className="gap-2">
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save Profile
+          Save Configuration
         </Button>
       </div>
     </div>

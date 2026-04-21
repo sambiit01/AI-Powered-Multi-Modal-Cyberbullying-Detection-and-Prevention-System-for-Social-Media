@@ -78,6 +78,16 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["profileType", "sensitivityThreshold", "banterTolerance"]
+    },
+    "GlobalConfig": {
+      "title": "Global Config",
+      "description": "Global system configurations for active profiles",
+      "type": "object",
+      "properties": {
+        "defaultProfileId": { "type": "string", "enum": ["standard", "guardian", "professional"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["defaultProfileId"]
     }
   },
   "auth": {
@@ -103,6 +113,10 @@
     "/moderationProfiles/{profileId}": {
       "schema": "#/backend/entities/AdminSettings",
       "description": "Moderation profile configurations"
+    },
+    "/adminSettings/global": {
+      "schema": "#/backend/entities/GlobalConfig",
+      "description": "Global administration settings"
     }
   }
 }

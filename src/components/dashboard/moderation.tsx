@@ -97,15 +97,16 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
     }
 
-    // Fetch settings from the 'standard' moderation profile
+    // Fetch settings - calling getProfileSettings() with no profileId 
+    // forces it to use the Global Config default lens.
     let sensitivityThreshold = 85;
     let banterTolerance = 75;
 
     try {
-      const settings = await getProfileSettings('standard');
+      const settings = await getProfileSettings();
       sensitivityThreshold = settings.sensitivityThreshold;
       banterTolerance = settings.banterTolerance;
-      console.log("[Moderation] Applied standard profile settings:", { sensitivityThreshold, banterTolerance });
+      console.log(`[Moderation] Applied lens settings (${settings.profileType}):`, { sensitivityThreshold, banterTolerance });
     } catch (err) {
       console.warn("[Moderation] Using default settings due to profile fetch error:", err);
     }

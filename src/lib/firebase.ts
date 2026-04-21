@@ -38,28 +38,54 @@ export interface AdminSettings {
 }
 
 /**
- * Fetches moderation settings for a specific profile.
- * Defaults to 'standard' if no profileId is provided.
+ * Interface for Global App Configuration
  */
-export async function getProfileSettings(profileId: string = 'standard'): Promise<AdminSettings> {
-  console.log(`[DATABASE] Fetching moderation profile: ${profileId}`);
-  const profileRef = doc(db, "moderationProfiles", profileId);
+export interface GlobalConfig {
+  defaultProfileId: string;
+  updatedAt: string;
+}
+
+/**
+ * Fetches moderation settings for a specific profile.
+ * Defaults to the global default profile if no profileId is provided.
+ */
+export async function getProfileSettings(profileId?: string): Promise<AdminSettings> {
+  let targetId = profileId;
+
+  if (!targetId) {
+    console.log("[DATABASE] No profileId provided. Checking global config...");
+    try {
+      const globalRef = doc(db, "adminSettings", "global");
+      const globalSnap = await getDoc(globalRef);
+      if (globalSnap.exists()) {
+        const config = globalSnap.data() as GlobalConfig;
+        targetId = config.defaultProfileId;
+        console.log(`[DATABASE] Global default profile active: ${targetId}`);
+      }
+    } catch (e) {
+      console.warn("[DATABASE] Could not fetch global config, falling back to standard.");
+    }
+  }
+
+  targetId = targetId || 'standard';
+  console.log(`[DATABASE] Fetching moderation profile: ${targetId}`);
+  const profileRef = doc(db, "moderationProfiles", targetId);
   
   try {
     const profileSnap = await getDoc(profileRef);
     if (profileSnap.exists()) {
       const data = profileSnap.data() as AdminSettings;
-      console.log(`SHIELDAI_DEBUG: Fetched Profile ${profileId} with Sensitivity ${data.sensitivityThreshold}`);
+      console.log(`SHIELDAI_DEBUG: Fetched Profile ${targetId} with Sensitivity ${data.sensitivityThreshold}`);
       return data;
     } else {
-      console.log(`[DATABASE] Profile '${profileId}' not found. Returning defaults.`);
+      console.log(`[DATABASE] Profile '${targetId}' not found. Returning defaults.`);
       const defaults = {
-        profileType: profileId,
+        profileType: targetId,
         sensitivityThreshold: 85,
         banterTolerance: 75,
         updatedAt: new Date().toISOString()
       };
-      console.log(`SHIELDAI_DEBUG: Fetched Profile ${profileId} with Sensitivity ${defaults.sensitivityThreshold} (DEFAULT)`);
+      console.log(`SHIELDAI_DEBUG: Fetched Profile ${targetId} with Sensitivity ${defaults.sensitivityThreshold} (DEFAULT)`);
       return defaults;
     }
   } catch (error: any) {
@@ -111,7 +137,6 @@ function calculateIsBursting(timestamps: { [uid: string]: number[] }, senderId: 
     const twoMinutesAgo = now - 120000;
     
     // Check if the 10th most recent message was sent within 2 minutes
-    // senderTimestamps is sliced(0,10) where [0] is newest, [9] is oldest in that window
     const tenthMessageTs = senderTimestamps[9] || 0;
     const sentTenInTwoMins = tenthMessageTs > twoMinutesAgo;
     
@@ -138,10 +163,7 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
       const data = relDoc.data();
       console.log(`[DATABASE] Relationship found:`, data);
       
-      // Calculate isBursting context dynamically
       const isBursting = calculateIsBursting(data.messageTimestamps || {}, senderId, receiverId);
-
-      // Return persisted frequency or calculate on the fly
       const frequency = data.interactionFrequency || calculateInteractionFrequency(data.interactionCount || 0, data.lastInteraction || new Date().toISOString());
 
       return {
@@ -204,11 +226,9 @@ export async function updateRelationshipBehavior(senderId: string, receiverId: s
     const totalCount = (data.interactionCount || 0) + 1;
     const isBidirectional = (userCounts[senderId] > 0 && userCounts[receiverId] > 0);
     
-    // Update Timestamps (store last 10)
     const timestamps = data.messageTimestamps || { [senderId]: [], [receiverId]: [] };
     timestamps[senderId] = [now, ...(timestamps[senderId] || [])].slice(0, 10);
 
-    // Update Sentiment
     let sentiment = data.rollingSentimentScore || 0.5;
     if (isSafe) {
       sentiment = Math.min(1.0, sentiment + 0.05);
@@ -220,8 +240,6 @@ export async function updateRelationshipBehavior(senderId: string, receiverId: s
     const newHistory = sentiment > 0.8 ? 'Friendly' : 'Neutral';
     const newLastInteraction = new Date().toISOString();
     const newFrequency = calculateInteractionFrequency(totalCount, newLastInteraction);
-    
-    // Recalculate and persist the isBursting flag
     const isBursting = calculateIsBursting(timestamps, senderId, receiverId);
 
     await updateDoc(relRef, {
