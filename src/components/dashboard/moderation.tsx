@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, AlertCircle, Upload, User, CheckCircle2, XCircle, Info } from "lucide-react";
+import { Loader2, AlertCircle, Upload, User, CheckCircle2, XCircle, Info, Eye } from "lucide-react";
 import {
   detectCyberbullying,
   DetectCyberbullyingFromTextOutput,
@@ -26,11 +26,18 @@ import {
 import { Badge } from "../ui/badge";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { getOrCreateRelationship, db, updateRelationshipBehavior, getProfileSettings } from "@/lib/firebase";
-import { collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
+import { getOrCreateRelationship, db, updateRelationshipBehavior, getProfileSettings, type GlobalConfig } from "@/lib/firebase";
+import { collection, query, where, limit, getDocs, addDoc, doc, getDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type ModerationProps = {
   addActivity: (activity: Omit<Activity, "id" | "date" | "userId">) => void;
@@ -55,9 +62,30 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const [error, setError] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
+  const [activeProfile, setActiveProfile] = useState<string>("standard");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = userProfile?.role === "superuser";
+
+  // Fetch the global default profile on mount to sync the lens
+  useEffect(() => {
+    async function syncGlobalLens() {
+      try {
+        const globalRef = doc(db, "adminSettings", "global");
+        const globalSnap = await getDoc(globalRef);
+        if (globalSnap.exists()) {
+          const config = globalSnap.data() as GlobalConfig;
+          if (config.defaultProfileId) {
+            setActiveProfile(config.defaultProfileId);
+            console.log(`[Moderation] Synced active profile with global default: ${config.defaultProfileId}`);
+          }
+        }
+      } catch (err) {
+        console.warn("[Moderation] Failed to sync global lens, defaulting to 'standard'");
+      }
+    }
+    syncGlobalLens();
+  }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -71,7 +99,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
   };
 
-  async function fetchContextData(senderId: string, receiverId: string) {
+  async function fetchContextData(senderId: string, receiverId: string, profileId: string) {
     const relData = await getOrCreateRelationship(senderId, receiverId);
     
     const relType = relData.relationshipType || 'Stranger';
@@ -97,16 +125,15 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
     }
 
-    // Fetch settings - calling getProfileSettings() with no profileId 
-    // forces it to use the Global Config default lens.
+    // Use the state-defined profileId for analysis
     let sensitivityThreshold = 85;
     let banterTolerance = 75;
 
     try {
-      const settings = await getProfileSettings();
+      const settings = await getProfileSettings(profileId);
       sensitivityThreshold = settings.sensitivityThreshold;
       banterTolerance = settings.banterTolerance;
-      console.log(`[Moderation] Applied lens settings (${settings.profileType}):`, { sensitivityThreshold, banterTolerance });
+      console.log(`[Moderation] Simulation using lens settings (${settings.profileType}):`, { sensitivityThreshold, banterTolerance });
     } catch (err) {
       console.warn("[Moderation] Using default settings due to profile fetch error:", err);
     }
@@ -132,7 +159,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     try {
-      const ctx = await fetchContextData(user.uid, receiverId);
+      // Pass the stateful activeProfile to fetchContextData
+      const ctx = await fetchContextData(user.uid, receiverId, activeProfile);
 
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
       let mediaResult: DetectCyberbullyingFromTextOutput | undefined;
@@ -251,18 +279,36 @@ export default function Moderation({ addActivity }: ModerationProps) {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6">
             <div className="grid gap-4 p-4 bg-muted/50 rounded-lg border">
-              <div className="grid gap-2">
-                <Label htmlFor="receiverId" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Receiver ID
-                </Label>
-                <Input
-                  id="receiverId"
-                  name="receiverId"
-                  placeholder="Target User ID"
-                  defaultValue="anonymous_receiver"
-                  disabled={isLoading}
-                />
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="receiverId" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Receiver ID
+                  </Label>
+                  <Input
+                    id="receiverId"
+                    name="receiverId"
+                    placeholder="Target User ID"
+                    defaultValue="anonymous_receiver"
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="activeProfile" className="flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Simulation Lens (Override)
+                  </Label>
+                  <Select value={activeProfile} onValueChange={setActiveProfile} disabled={isLoading}>
+                    <SelectTrigger id="activeProfile">
+                      <SelectValue placeholder="Select lens" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="guardian">Guardian</SelectItem>
+                      <SelectItem value="professional">Professional</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
