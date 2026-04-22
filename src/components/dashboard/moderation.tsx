@@ -61,36 +61,39 @@ export default function Moderation({ addActivity }: ModerationProps) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState<string>("standard");
+  const [availableProfiles, setAvailableProfiles] = useState<string[]>(["standard", "guardian", "professional"]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = userProfile?.role === "superuser";
 
-  // Fetch the global default profile on mount to sync the lens
   useEffect(() => {
-    async function syncGlobalLens() {
+    async function syncDynamicData() {
       try {
+        // Fetch all available profiles for the dropdown
+        const profilesSnap = await getDocs(collection(db, "moderationProfiles"));
+        const profiles = profilesSnap.docs.map(doc => doc.id);
+        if (profiles.length > 0) setAvailableProfiles(profiles);
+
+        // Fetch Global active profile to sync default lens
         const globalRef = doc(db, "adminSettings", "global");
         const globalSnap = await getDoc(globalRef);
         if (globalSnap.exists()) {
           const config = globalSnap.data() as GlobalConfig;
           if (config.defaultProfileId) {
             setActiveProfile(config.defaultProfileId);
-            console.log(`[Moderation] Synced active profile with global default: ${config.defaultProfileId}`);
           }
         }
       } catch (err) {
-        console.warn("[Moderation] Failed to sync global lens, defaulting to 'standard'");
+        console.warn("[Moderation] Failed to sync global data.");
       }
     }
-    syncGlobalLens();
+    syncDynamicData();
   }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setFileType(file.type);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFilePreview(reader.result as string);
@@ -125,20 +128,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
       }
     }
 
-    // Use the state-defined profileId for analysis
-    let sensitivityThreshold = 85;
-    let banterTolerance = 75;
-
-    try {
-      const settings = await getProfileSettings(profileId);
-      sensitivityThreshold = settings.sensitivityThreshold;
-      banterTolerance = settings.banterTolerance;
-      console.log(`[Moderation] Simulation using lens settings (${settings.profileType}):`, { sensitivityThreshold, banterTolerance });
-    } catch (err) {
-      console.warn("[Moderation] Using default settings due to profile fetch error:", err);
-    }
-
-    return { relType, histType, freq, isBursting, examples, sensitivityThreshold, banterTolerance };
+    const settings = await getProfileSettings(profileId);
+    return { relType, histType, freq, isBursting, examples, ...settings };
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -159,7 +150,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
     }
 
     try {
-      // Pass the stateful activeProfile to fetchContextData
       const ctx = await fetchContextData(user.uid, receiverId, activeProfile);
 
       let textResult: DetectCyberbullyingFromTextOutput | undefined;
@@ -237,7 +227,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       });
     } catch (e: any) {
       console.error("[Moderation] Analysis error:", e);
-      setError(e.message || "An unexpected error occurred during analysis.");
+      setError(e.message || "An error occurred.");
     } finally {
       setIsLoading(false);
     }
@@ -255,26 +245,20 @@ export default function Moderation({ addActivity }: ModerationProps) {
     };
 
     addDoc(collection(db, "contextExamples"), feedbackData)
-      .then(() => {
-        toast({ title: "Feedback Saved", description: "AI accuracy improved." });
-      })
-      .catch((err) => {
-        errorEmitter.emit("permission-error", new FirestorePermissionError({
-          path: "contextExamples",
-          operation: "create",
-          requestResourceData: feedbackData
-        }));
-      });
+      .then(() => toast({ title: "Feedback Saved" }))
+      .catch((err) => errorEmitter.emit("permission-error", new FirestorePermissionError({
+        path: "contextExamples",
+        operation: "create",
+        requestResourceData: feedbackData
+      })));
   };
 
   return (
     <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
       <Card>
         <CardHeader>
-          <CardTitle>Behavioral Moderation</CardTitle>
-          <CardDescription>
-            AI analysis powered by relationship leveling and frequency detection.
-          </CardDescription>
+          <CardTitle>Simulation Console</CardTitle>
+          <CardDescription>Test content analysis under specific behavioral profiles.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6">
@@ -283,29 +267,25 @@ export default function Moderation({ addActivity }: ModerationProps) {
                 <div className="grid gap-2">
                   <Label htmlFor="receiverId" className="flex items-center gap-2">
                     <User className="h-4 w-4" />
-                    Receiver ID
+                    Target User ID
                   </Label>
-                  <Input
-                    id="receiverId"
-                    name="receiverId"
-                    placeholder="Target User ID"
-                    defaultValue="anonymous_receiver"
-                    disabled={isLoading}
-                  />
+                  <Input id="receiverId" name="receiverId" placeholder="Receiver ID" defaultValue="anonymous_receiver" disabled={isLoading} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="activeProfile" className="flex items-center gap-2">
                     <Eye className="h-4 w-4" />
-                    Simulation Lens (Override)
+                    Moderation Lens
                   </Label>
                   <Select value={activeProfile} onValueChange={setActiveProfile} disabled={isLoading}>
                     <SelectTrigger id="activeProfile">
                       <SelectValue placeholder="Select lens" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="standard">Standard</SelectItem>
-                      <SelectItem value="guardian">Guardian</SelectItem>
-                      <SelectItem value="professional">Professional</SelectItem>
+                      {availableProfiles.map(profile => (
+                        <SelectItem key={profile} value={profile}>
+                          {profile.charAt(0).toUpperCase() + profile.slice(1).replace(/-/g, ' ')}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -313,119 +293,60 @@ export default function Moderation({ addActivity }: ModerationProps) {
             </div>
 
             <div className="grid gap-3">
-              <Label htmlFor="text">Message Content</Label>
-              <Textarea
-                id="text"
-                name="text"
-                placeholder="Analyze text for cyberbullying..."
-                className="min-h-24"
-                disabled={isLoading}
-              />
+              <Label htmlFor="text">Message</Label>
+              <Textarea id="text" name="text" placeholder="Enter message text..." className="min-h-24" disabled={isLoading} />
             </div>
 
             <div className="grid gap-3">
-              <Label htmlFor="media">Visual Context (Optional)</Label>
-              <Input
-                id="media"
-                name="media"
-                type="file"
-                accept="image/*,video/*"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                disabled={isLoading}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                className="w-full h-16 border-dashed"
-              >
-                <Upload className="mr-2 h-5 w-5" />
-                {filePreview ? "Change Media" : "Upload Image or Video"}
+              <Label>Media</Label>
+              <Input id="media" name="media" type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isLoading} />
+              <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="w-full border-dashed">
+                <Upload className="mr-2 h-4 w-4" />
+                {filePreview ? "Media Attached" : "Attach Image"}
               </Button>
             </div>
           </CardContent>
-          <CardFooter className="border-t px-6 py-4 bg-muted/20">
+          <CardFooter className="border-t px-6 py-4">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Analyze with Behavioral Context
+              Run Behavioral Analysis
             </Button>
           </CardFooter>
         </form>
       </Card>
 
-      {error && (
-        <Card className="border-destructive animate-in fade-in slide-in-from-top-2">
-          <CardHeader className="flex flex-row items-center gap-3">
-            <AlertCircle className="h-6 w-6 text-destructive" />
-            <div>
-              <CardTitle className="text-destructive font-semibold">Analysis Failed</CardTitle>
-              <CardDescription className="text-destructive/80">
-                {error}
-              </CardDescription>
-            </div>
-          </CardHeader>
-        </Card>
-      )}
-
       {result && (
         <Card className="animate-in fade-in slide-in-from-bottom-2 border-primary/20 shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Inference Result</CardTitle>
-            {result.isBursting && (
-              <Badge variant="destructive" className="animate-pulse">
-                Bursting Detected
-              </Badge>
-            )}
+            <CardTitle>AI Results</CardTitle>
+            {result.isBursting && <Badge variant="destructive">Bursting Detected</Badge>}
           </CardHeader>
-          <CardContent className="space-y-6">
-            {(result.textResult || result.mediaResult) && (
-              <div className="p-4 rounded-lg border bg-muted/30">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{result.relType}</Badge>
-                    <Badge variant="outline" className="text-xs">{result.freq}</Badge>
-                    <h3 className="font-semibold text-sm">AI Determination</h3>
-                  </div>
-                  <Badge variant={(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "destructive" : "default"}>
-                    {(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "Flagged" : "Safe"}
-                  </Badge>
+          <CardContent className="space-y-4">
+            <div className="p-4 rounded-lg border bg-muted/30">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex gap-2">
+                  <Badge variant="outline">{result.relType}</Badge>
+                  <Badge variant="outline">{result.freq}</Badge>
                 </div>
-                <p className="text-sm mb-6 leading-relaxed text-muted-foreground italic">
-                  "{result.textResult?.reasoning || result.mediaResult?.reasoning}"
-                </p>
-                
-                {isAdmin && (
-                  <div className="pt-4 border-t">
-                    <p className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-1">
-                      Admin Feedback Loop <Info className="h-3 w-3" />
-                    </p>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 hover:bg-destructive/10"
-                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Occasional", "Bullying")}
-                      >
-                        <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                        Label as Bullying
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 hover:bg-primary/10"
-                        onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Occasional", "Not Bullying")}
-                      >
-                        <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
-                        Label as Safe
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <Badge variant={(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "destructive" : "default"}>
+                  {(result.textResult?.isCyberbullying || result.mediaResult?.isCyberbullying) ? "Flagged" : "Safe"}
+                </Badge>
               </div>
-            )}
+              <p className="text-sm italic text-muted-foreground">
+                "{result.textResult?.reasoning || result.mediaResult?.reasoning}"
+              </p>
+              
+              {isAdmin && (
+                <div className="pt-4 mt-4 border-t flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Occasional", "Bullying")}>
+                    <XCircle className="mr-2 h-4 w-4 text-destructive" /> Label Bullying
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleCorrectLabel(result.originalText || "", result.relType || "Stranger", result.histType || "Neutral", result.freq || "Occasional", "Not Bullying")}>
+                    <CheckCircle2 className="mr-2 h-4 w-4 text-primary" /> Label Safe
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

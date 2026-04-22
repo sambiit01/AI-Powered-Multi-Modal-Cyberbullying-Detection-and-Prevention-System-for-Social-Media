@@ -8,16 +8,18 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { db, getProfileSettings, type GlobalConfig } from "@/lib/firebase";
+import { db, getProfileSettings, type GlobalConfig, type AdminSettings } from "@/lib/firebase";
 import { doc, setDoc, collection, getDocs, getDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Loader2, Download, Database, Save, Eye } from "lucide-react";
+import { Loader2, Database, Save, Eye, Plus, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -31,15 +33,25 @@ export default function Settings() {
   const [toxicityThreshold, setToxicityThreshold] = useState(85);
   const [bullyingThreshold, setBullyingThreshold] = useState(75);
   const [defaultProfileId, setDefaultProfileId] = useState("");
+  const [availableProfiles, setAvailableProfiles] = useState<string[]>(["standard", "guardian", "professional"]);
+  const [newProfileName, setNewProfileName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // 1. Initial Load: Fetch Global Config and Active Thresholds
+  // 1. Initial Load: Fetch Global Config and Available Profiles
   useEffect(() => {
-    async function loadGlobalConfig() {
-      console.log("[SETTINGS] Loading global configurations...");
+    async function loadConfig() {
+      console.log("[SETTINGS] Loading configurations...");
       try {
+        // Fetch all available profiles
+        const profilesSnap = await getDocs(collection(db, "moderationProfiles"));
+        const profiles = profilesSnap.docs.map(doc => doc.id);
+        if (profiles.length > 0) {
+          setAvailableProfiles(profiles);
+        }
+
+        // Fetch Global active profile
         const globalRef = doc(db, "adminSettings", "global");
         const globalSnap = await getDoc(globalRef);
         let activeProfile = "standard";
@@ -50,13 +62,14 @@ export default function Settings() {
         }
         
         setDefaultProfileId(activeProfile);
-        // Thresholds will be loaded by the second useEffect watching defaultProfileId
       } catch (err: any) {
-        console.error("[SETTINGS] Global load failed:", err);
+        console.error("[SETTINGS] Load failed:", err);
         setDefaultProfileId("standard");
+      } finally {
+        setIsLoading(false);
       }
     }
-    loadGlobalConfig();
+    loadConfig();
   }, []);
 
   // 2. Profile Sync: Fetch specific thresholds whenever the selected profile changes
@@ -64,19 +77,49 @@ export default function Settings() {
     if (!defaultProfileId) return;
 
     async function syncProfileThresholds() {
-      console.log(`[SETTINGS] Syncing thresholds for profile: ${defaultProfileId}`);
       try {
         const data = await getProfileSettings(defaultProfileId);
         setToxicityThreshold(data.sensitivityThreshold ?? 85);
         setBullyingThreshold(data.banterTolerance ?? 75);
-        setIsLoading(false);
       } catch (err: any) {
         console.error(`[SETTINGS] Profile sync failed for ${defaultProfileId}:`, err);
-        setIsLoading(false);
       }
     }
     syncProfileThresholds();
   }, [defaultProfileId]);
+
+  const handleCreateProfile = async () => {
+    if (!newProfileName.trim()) {
+      toast({ variant: "destructive", title: "Missing Name", description: "Please enter a name for the new profile." });
+      return;
+    }
+
+    const profileId = newProfileName.toLowerCase().trim().replace(/\s+/g, '-');
+    if (availableProfiles.includes(profileId)) {
+      toast({ variant: "destructive", title: "Conflict", description: "A profile with this name already exists." });
+      return;
+    }
+
+    setIsCreating(true);
+    const newProfileData: AdminSettings = {
+      profileType: profileId,
+      sensitivityThreshold: 85,
+      banterTolerance: 75,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, "moderationProfiles", profileId), newProfileData);
+      setAvailableProfiles(prev => [...prev, profileId]);
+      setDefaultProfileId(profileId);
+      setNewProfileName("");
+      toast({ title: "Profile Created", description: `New profile "${profileId}" is now available.` });
+    } catch (err) {
+      console.error("[SETTINGS] Creation failed:", err);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
@@ -94,15 +137,12 @@ export default function Settings() {
     };
 
     try {
-      // 1. Save Global config
       await setDoc(doc(db, "adminSettings", "global"), globalData);
-      
-      // 2. Save active profile data
       await setDoc(doc(db, "moderationProfiles", defaultProfileId), profileData);
       
       toast({
         title: "Settings Saved",
-        description: `Lens: ${defaultProfileId} | Sensitivity: ${toxicityThreshold}%`,
+        description: `Profile: ${defaultProfileId} updated and set as Global Default.`,
       });
     } catch (err: any) {
       console.error("[SETTINGS] Save failed:", err);
@@ -116,58 +156,7 @@ export default function Settings() {
     }
   };
 
-  const handleExportCSV = async () => {
-    setIsExporting(true);
-    try {
-      const querySnapshot = await getDocs(collection(db, "contextExamples"));
-      const records = querySnapshot.docs.map(doc => doc.data());
-
-      if (records.length === 0) {
-        toast({
-          variant: "destructive",
-          title: "No Data",
-          description: "There are no context examples to export.",
-        });
-        return;
-      }
-
-      const headers = ["text", "relationship", "interaction_history", "interaction_frequency", "label", "sourceFile", "uploadedAt"];
-      
-      const csvContent = [
-        headers.join(","),
-        ...records.map(record => {
-          return headers.map(header => {
-            let val = record[header] || "";
-            if (typeof val === 'string') {
-              val = `"${val.replace(/"/g, '""')}"`;
-            }
-            return val;
-          }).join(",");
-        })
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `shieldai_context_examples_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      toast({
-        title: "Export Complete",
-        description: `Successfully exported ${records.length} records.`,
-      });
-    } catch (err: any) {
-      console.error("[SETTINGS] Export error:", err);
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  if (isLoading && !defaultProfileId) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -175,50 +164,77 @@ export default function Settings() {
     );
   }
 
-  const safeProfileName = defaultProfileId || "standard";
-  const formattedProfileName = safeProfileName.charAt(0).toUpperCase() + safeProfileName.slice(1);
-
   return (
     <div className="grid gap-6">
+      {/* 1. Global Moderation Lens Selection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5 text-primary" />
-            Global Moderation Lens
+            Active Moderation Lens
           </CardTitle>
           <CardDescription>
-            Select the active moderation personality for the entire system.
+            Select which profile governs the entire system's automated logic.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="lens-select">Active Profile</Label>
+              <Label htmlFor="lens-select">Current Global Profile</Label>
               <Select value={defaultProfileId} onValueChange={setDefaultProfileId}>
                 <SelectTrigger id="lens-select">
                   <SelectValue placeholder="Select a lens" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="standard">Standard (Balanced)</SelectItem>
-                  <SelectItem value="guardian">Guardian (Strict/Safe)</SelectItem>
-                  <SelectItem value="professional">Professional (Neutral/Formal)</SelectItem>
+                  {availableProfiles.map(profile => (
+                    <SelectItem key={profile} value={profile}>
+                      {profile.charAt(0).toUpperCase() + profile.slice(1).replace(/-/g, ' ')}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="p-3 bg-muted/50 rounded-md border flex items-center">
               <p className="text-xs text-muted-foreground italic">
-                Changing the selection will load that profile's custom thresholds below.
+                Switching profiles will load their specific tuning parameters below.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* 2. Create New Profile */}
       <Card>
         <CardHeader>
-          <CardTitle>Profile Tuning: {formattedProfileName}</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Plus className="h-5 w-5" />
+            Create Custom Profile
+          </CardTitle>
+          <CardDescription>Add a new personality with specific sensitivity rules.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <Input 
+              placeholder="e.g. Strict High School, Gaming Mode" 
+              value={newProfileName}
+              onChange={(e) => setNewProfileName(e.target.value)}
+              disabled={isCreating}
+            />
+            <Button onClick={handleCreateProfile} disabled={isCreating} variant="secondary">
+              {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Profile"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 3. Profile Tuning */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Tuning: {defaultProfileId.charAt(0).toUpperCase() + defaultProfileId.slice(1).replace(/-/g, ' ')}
+          </CardTitle>
           <CardDescription>
-            Adjust thresholds for the currently selected active profile.
+            Fine-tune thresholds for the active selection.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -239,7 +255,7 @@ export default function Settings() {
               step={1}
             />
             <p className="text-sm text-muted-foreground">
-              Required confidence level for AI to flag content. Higher = less aggressive flagging.
+              Required confidence for flagging. Higher = more cautious (fewer flags).
             </p>
           </div>
           <div className="space-y-4">
@@ -259,44 +275,17 @@ export default function Settings() {
               step={1}
             />
             <p className="text-sm text-muted-foreground">
-              How much "rough" talk is permitted between close friends. Higher = more permissive.
+              Rough talk allowance between friends. Higher = more permissive.
             </p>
           </div>
-          
-          <div className="pt-6 border-t">
-            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-              <Database className="h-5 w-5 text-muted-foreground" />
-              Data Management
-            </h3>
-            <Card className="bg-muted/30">
-              <CardContent className="pt-6 flex items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold">Training Data Export</p>
-                  <p className="text-xs text-muted-foreground">
-                    Download the contextExamples dataset as a CSV.
-                  </p>
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleExportCSV} 
-                  disabled={isExporting}
-                  className="shrink-0"
-                >
-                  {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                  Export CSV
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
         </CardContent>
+        <CardFooter className="flex justify-end border-t p-4">
+          <Button onClick={handleSaveChanges} disabled={isSaving} className="gap-2">
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Changes to {defaultProfileId}
+          </Button>
+        </CardFooter>
       </Card>
-      <div className="flex justify-end">
-        <Button onClick={handleSaveChanges} disabled={isSaving} className="gap-2">
-          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save Configuration
-        </Button>
-      </div>
     </div>
   );
 }
