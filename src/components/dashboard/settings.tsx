@@ -19,7 +19,7 @@ import { db, getProfileSettings, type GlobalConfig, type AdminSettings } from "@
 import { doc, setDoc, collection, getDocs, getDoc, deleteDoc } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Loader2, Save, Eye, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Loader2, Save, Eye, Plus, Trash2, AlertCircle, Download, Database } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -51,16 +51,13 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // 1. Initial Load: Fetch Global Config and Available Profiles
   useEffect(() => {
     async function loadConfig() {
-      console.log("[SETTINGS] Loading configurations...");
       try {
         const profilesSnap = await getDocs(collection(db, "moderationProfiles"));
         const profiles = profilesSnap.docs.map(doc => doc.id);
-        
-        // Ensure 'standard' exists at least in local state for UI
         const finalProfiles = profiles.length > 0 ? profiles : ["standard"];
         setAvailableProfiles(finalProfiles);
 
@@ -85,7 +82,6 @@ export default function Settings() {
     loadConfig();
   }, []);
 
-  // 2. Profile Sync: Fetch specific thresholds whenever the selected profile changes
   useEffect(() => {
     if (!defaultProfileId) return;
 
@@ -137,34 +133,22 @@ export default function Settings() {
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    
     const profileData = {
       profileType: profileDisplayName || defaultProfileId,
       sensitivityThreshold: toxicityThreshold,
       banterTolerance: bullyingThreshold,
       updatedAt: new Date().toISOString()
     };
-
     const globalData = {
       defaultProfileId: defaultProfileId,
       updatedAt: new Date().toISOString()
     };
-
     try {
       await setDoc(doc(db, "adminSettings", "global"), globalData);
       await setDoc(doc(db, "moderationProfiles", defaultProfileId), profileData);
-      
-      toast({
-        title: "Settings Saved",
-        description: `Profile "${profileData.profileType}" updated and set as Global Default.`,
-      });
+      toast({ title: "Settings Saved", description: `Profile "${profileData.profileType}" updated and set as Global Default.` });
     } catch (err: any) {
       console.error("[SETTINGS] Save failed:", err);
-      errorEmitter.emit("permission-error", new FirestorePermissionError({
-        path: `moderationProfiles/${defaultProfileId}`,
-        operation: 'write',
-        requestResourceData: profileData
-      }));
     } finally {
       setIsSaving(false);
     }
@@ -175,32 +159,63 @@ export default function Settings() {
       toast({ variant: "destructive", title: "Action Denied", description: "The 'standard' profile is a system default and cannot be deleted." });
       return;
     }
-
     setIsDeleting(true);
     try {
       await deleteDoc(doc(db, "moderationProfiles", defaultProfileId));
-      
       const updatedProfiles = availableProfiles.filter(p => p !== defaultProfileId);
       setAvailableProfiles(updatedProfiles);
-      
-      // Fallback to standard if it exists, otherwise the first available
       const fallback = updatedProfiles.includes('standard') ? 'standard' : updatedProfiles[0] || 'standard';
       setDefaultProfileId(fallback);
-
-      // Update global config if we just deleted the default
-      await setDoc(doc(db, "adminSettings", "global"), {
-        defaultProfileId: fallback,
-        updatedAt: new Date().toISOString()
-      });
-
-      toast({
-        title: "Profile Deleted",
-        description: `The profile has been removed. System reset to ${fallback}.`,
-      });
+      await setDoc(doc(db, "adminSettings", "global"), { defaultProfileId: fallback, updatedAt: new Date().toISOString() });
+      toast({ title: "Profile Deleted", description: `Profile removed. System reset to ${fallback}.` });
     } catch (err: any) {
       console.error("[SETTINGS] Delete failed:", err);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "contextExamples"));
+      if (querySnapshot.empty) {
+        toast({ title: "No Data", description: "The contextExamples collection is empty." });
+        return;
+      }
+
+      const headers = ["Text", "Relationship", "Interaction History", "Interaction Frequency", "Profile Type", "Label", "Uploaded At"];
+      const csvRows = [headers.join(",")];
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const row = [
+          `"${(data.text || "").replace(/"/g, '""')}"`,
+          `"${data.relationship || ""}"`,
+          `"${data.interaction_history || ""}"`,
+          `"${data.interaction_frequency || ""}"`,
+          `"${data.profileType || "general"}"`,
+          `"${data.label || ""}"`,
+          `"${data.uploadedAt || ""}"`,
+        ];
+        csvRows.push(row.join(","));
+      });
+
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.setAttribute("hidden", "");
+      a.setAttribute("href", url);
+      a.setAttribute("download", `shieldai_context_examples_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast({ title: "Export Complete", description: "CSV file downloaded successfully." });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({ variant: "destructive", title: "Export Failed", description: "Could not export data." });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -221,16 +236,14 @@ export default function Settings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5 text-primary" />
-            Active Moderation Lens
+            Global Moderation Lens
           </CardTitle>
-          <CardDescription>
-            Select which profile governs the entire system's automated logic.
-          </CardDescription>
+          <CardDescription>Select the profile that governs automated system logic.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="lens-select">Current Global Profile</Label>
+              <Label htmlFor="lens-select">Active Global Profile</Label>
               <Select value={defaultProfileId} onValueChange={setDefaultProfileId}>
                 <SelectTrigger id="lens-select">
                   <SelectValue placeholder="Select a lens" />
@@ -247,8 +260,7 @@ export default function Settings() {
             <div className="p-4 bg-muted/50 rounded-lg border flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground italic leading-relaxed">
-                The selected profile will be used for all real-time detections. 
-                Switching profiles will load their specific tuning parameters below.
+                Changes here affect real-time detections globally. Tuning for the selected profile is loaded below.
               </p>
             </div>
           </div>
@@ -283,12 +295,8 @@ export default function Settings() {
       {/* 3. Profile Tuning */}
       <Card className="border-primary/20 shadow-sm">
         <CardHeader>
-          <CardTitle>
-            Tuning: {currentProfileName}
-          </CardTitle>
-          <CardDescription>
-            Fine-tune thresholds and identity for the active selection.
-          </CardDescription>
+          <CardTitle>Tuning: {currentProfileName}</CardTitle>
+          <CardDescription>Fine-tune thresholds for the active profile selection.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
           <div className="space-y-3">
@@ -297,54 +305,25 @@ export default function Settings() {
               id="profile-name"
               value={profileDisplayName}
               onChange={(e) => setProfileDisplayName(e.target.value)}
-              placeholder="Enter friendly name"
               disabled={isSaving}
             />
-            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
-              System ID: {defaultProfileId}
-            </p>
+            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">System ID: {defaultProfileId}</p>
           </div>
-
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <Label htmlFor="toxicity-threshold" className="text-sm font-semibold">
-                AI Sensitivity Threshold
-              </Label>
-              <span className="text-lg font-bold text-primary">
-                {toxicityThreshold}%
-              </span>
+              <Label className="text-sm font-semibold">AI Sensitivity Threshold</Label>
+              <span className="text-lg font-bold text-primary">{toxicityThreshold}%</span>
             </div>
-            <Slider
-              id="toxicity-threshold"
-              value={[toxicityThreshold]}
-              onValueChange={(value) => setToxicityThreshold(value[0])}
-              max={100}
-              step={1}
-            />
-            <p className="text-xs text-muted-foreground">
-              Required confidence for flagging. Higher = more cautious (fewer flags).
-            </p>
+            <Slider value={[toxicityThreshold]} onValueChange={(v) => setToxicityThreshold(v[0])} max={100} step={1} />
+            <p className="text-xs text-muted-foreground">Confidence required for flagging. Higher = fewer flags.</p>
           </div>
-
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <Label htmlFor="bullying-threshold" className="text-sm font-semibold">
-                Banter Tolerance
-              </Label>
-              <span className="text-lg font-bold text-primary">
-                {bullyingThreshold}%
-              </span>
+              <Label className="text-sm font-semibold">Banter Tolerance</Label>
+              <span className="text-lg font-bold text-primary">{bullyingThreshold}%</span>
             </div>
-            <Slider
-              id="bullying-threshold"
-              value={[bullyingThreshold]}
-              onValueChange={(value) => setBullyingThreshold(value[0])}
-              max={100}
-              step={1}
-            />
-            <p className="text-xs text-muted-foreground">
-              Rough talk allowance between friends. Higher = more permissive.
-            </p>
+            <Slider value={[bullyingThreshold]} onValueChange={(v) => setBullyingThreshold(v[0])} max={100} step={1} />
+            <p className="text-xs text-muted-foreground">Allowance for hostile talk between friends. Higher = more permissive.</p>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-between gap-4 border-t p-6 bg-muted/20">
@@ -353,23 +332,17 @@ export default function Settings() {
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" className="text-destructive hover:bg-destructive/10 border-destructive/20 gap-2">
-                    <Trash2 className="h-4 w-4" />
-                    Delete Profile
+                    <Trash2 className="h-4 w-4" /> Delete Profile
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete the "{currentProfileName}" profile. 
-                      If it was the global default, the system will fallback to "Standard".
-                    </AlertDialogDescription>
+                    <AlertDialogDescription>This permanently removes "{currentProfileName}". If it was global default, system resets to "Standard".</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteProfile} className="bg-destructive hover:bg-destructive/90">
-                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Delete"}
-                    </AlertDialogAction>
+                    <AlertDialogAction onClick={handleDeleteProfile} className="bg-destructive hover:bg-destructive/90">Confirm Delete</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -377,9 +350,33 @@ export default function Settings() {
           </div>
           <Button onClick={handleSaveChanges} disabled={isSaving} className="gap-2 w-full sm:w-auto">
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save All Changes
+            Save Changes
           </Button>
         </CardFooter>
+      </Card>
+
+      {/* 4. Data Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            Data Management
+          </CardTitle>
+          <CardDescription>Export and manage training data collected from the platform.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <div className="p-4 rounded-lg bg-muted/50 border">
+              <p className="text-sm text-muted-foreground mb-4">
+                Export all manual corrections and context examples to a CSV file for auditing or external training.
+              </p>
+              <Button onClick={handleExportCSV} disabled={isExporting} variant="outline" className="w-full sm:w-auto">
+                {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Export Training Data (CSV)
+              </Button>
+            </div>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );
