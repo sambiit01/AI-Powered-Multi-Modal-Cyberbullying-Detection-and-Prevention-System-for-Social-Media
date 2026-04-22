@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -108,7 +107,6 @@ export default function Moderation({ addActivity }: ModerationProps) {
     const freq = relData.interactionFrequency || 'Occasional';
     const isBursting = !!relData.isBursting;
 
-    // Retrieval now happens inside the detectCyberbullying flow on the server
     const settings = await getProfileSettings(profileId);
     return { relType, histType, freq, isBursting, ...settings };
   }
@@ -158,7 +156,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
           originalText: text,
           relType: ctx.relType,
           histType: ctx.histType,
-          freq: ctx.freq
+          freq: ctx.freq,
+          profileId: activeProfile
         });
 
         await updateRelationshipBehavior(user.uid, receiverId, !textResult.isCyberbullying);
@@ -189,7 +188,8 @@ export default function Moderation({ addActivity }: ModerationProps) {
             originalText: extractedText,
             relType: ctx.relType,
             histType: ctx.histType,
-            freq: ctx.freq
+            freq: ctx.freq,
+            profileId: activeProfile
           });
 
           await updateRelationshipBehavior(user.uid, receiverId, !mediaResult.isCyberbullying);
@@ -220,7 +220,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       relationship: relType,
       interaction_history: histType,
       interaction_frequency: freq,
-      profileType: activeProfile, // Track which profile this training example belongs to
+      profileType: activeProfile,
       label: correctedLabel,
       sourceFile: "Manual Correction",
       uploadedAt: new Date().toISOString()

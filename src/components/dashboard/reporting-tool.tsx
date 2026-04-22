@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,15 +54,16 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Info, CheckCircle2, XCircle, FileText, ListChecks, Eye } from "lucide-react";
+import { Info, CheckCircle2, XCircle, FileText, ListChecks, Eye, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { type Activity } from "./dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { format, parseISO } from "date-fns";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { Label } from "@/components/ui/label";
 
 const reportSchema = z.object({
   contentUrl: z.string().url({ message: "Please enter a valid URL." }),
@@ -85,6 +86,27 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === "superuser";
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [availableProfiles, setAvailableProfiles] = useState<string[]>(["standard", "guardian", "professional"]);
+  const [reviewProfile, setReviewProfile] = useState<string>("standard");
+
+  useEffect(() => {
+    async function fetchProfiles() {
+      try {
+        const snap = await getDocs(collection(db, "moderationProfiles"));
+        const profiles = snap.docs.map(doc => doc.id);
+        if (profiles.length > 0) setAvailableProfiles(profiles);
+      } catch (err) {
+        console.warn("[ReportingTool] Failed to fetch profiles.");
+      }
+    }
+    fetchProfiles();
+  }, []);
+
+  useEffect(() => {
+    if (selectedActivity) {
+      setReviewProfile(selectedActivity.profileId || "standard");
+    }
+  }, [selectedActivity]);
 
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportSchema),
@@ -119,13 +141,13 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
       relationship: activity.relType || "Stranger",
       interaction_history: activity.histType || "Neutral",
       interaction_frequency: activity.freq || "Normal",
+      profileType: reviewProfile, // Use the profile selected in the review dialog
       history: "Admin Management Review",
       label: correctedLabel,
       sourceFile: "Admin Reporting Console",
       uploadedAt: new Date().toISOString()
     };
 
-    // 1. Add to context examples
     addDoc(collection(db, "contextExamples"), feedbackData)
       .catch((err) => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({
@@ -135,22 +157,22 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
         }));
       });
 
-    // 2. Update the actual activity status
     const activityRef = doc(db, "activities", activity.id);
     updateDoc(activityRef, {
       status: newStatus,
-      isCyberbullying: isBullying
+      isCyberbullying: isBullying,
+      profileId: reviewProfile
     }).then(() => {
       toast({
         title: "Incident Reviewed",
-        description: `Successfully labeled as ${newStatus}. AI accuracy improved.`,
+        description: `Successfully labeled as ${newStatus} for profile ${reviewProfile}.`,
       });
       setSelectedActivity(null);
     }).catch((err) => {
       errorEmitter.emit("permission-error", new FirestorePermissionError({
         path: `activities/${activity.id}`,
         operation: "update",
-        requestResourceData: { status: newStatus }
+        requestResourceData: { status: newStatus, profileId: reviewProfile }
       }));
     });
   };
@@ -335,8 +357,33 @@ export default function ReportingTool({ addActivity, activities }: ReportingTool
                   <div className="flex gap-2">
                     <Badge variant="outline">{selectedActivity.relType || "Unknown"}</Badge>
                     <Badge variant="outline" className="bg-muted">{selectedActivity.histType || "Neutral"}</Badge>
-                    <Badge variant="outline" className="bg-muted">{selectedActivity.freq || "Normal"}</Badge>
                   </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="review-profile" className="flex items-center gap-2 text-sm font-semibold">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    Target Moderation Profile
+                  </Label>
+                  <Select value={reviewProfile} onValueChange={setReviewProfile}>
+                    <SelectTrigger id="review-profile">
+                      <SelectValue placeholder="Select profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableProfiles.map(p => (
+                        <SelectItem key={p} value={p}>
+                          {p.charAt(0).toUpperCase() + p.slice(1).replace(/-/g, ' ')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Saving feedback will associate this example with the selected profile.
+                  </p>
                 </div>
               </div>
 

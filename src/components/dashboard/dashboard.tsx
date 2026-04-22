@@ -30,6 +30,7 @@ export type Activity = {
   relType?: string;
   histType?: string;
   freq?: string;
+  profileId?: string; // The moderation profile used for this activity
   userId: string;
 };
 

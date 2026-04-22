@@ -107,13 +107,13 @@ export default function Overview({ activities }: OverviewProps) {
       relationship: activity.relType || "Stranger",
       interaction_history: activity.histType || "Neutral",
       interaction_frequency: activity.freq || "Normal",
+      profileType: activity.profileId || "standard",
       history: "Admin Corrected from Log",
       label: correctedLabel,
       sourceFile: "Activity Feed Correction",
       uploadedAt: new Date().toISOString()
     };
 
-    // 1. Add to context examples
     addDoc(collection(db, "contextExamples"), feedbackData)
       .catch((err) => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({
@@ -123,7 +123,6 @@ export default function Overview({ activities }: OverviewProps) {
         }));
       });
 
-    // 2. Update the actual activity status
     const activityRef = doc(db, "activities", activity.id);
     updateDoc(activityRef, {
       status: newStatus,
