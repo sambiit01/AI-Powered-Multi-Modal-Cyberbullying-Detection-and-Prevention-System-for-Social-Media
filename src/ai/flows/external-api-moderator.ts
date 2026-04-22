@@ -51,12 +51,15 @@ const externalModeratorFlow = ai.defineFlow(
     console.log(`[EXTERNAL_API] Request received from Sender: ${input.senderId} to Receiver: ${input.receiverId}`);
     
     // 1. Fetch/Calculate Behavioral Context (The "Relationship Bond")
+    // This function automatically calculates interaction counts, relationship levels, and bursting mode.
     const relData = await getOrCreateRelationship(input.senderId, input.receiverId);
     
     // 2. Fetch Moderation Profile Settings
+    // Defaults to the global configuration if profileId is omitted.
     const settings = await getProfileSettings(input.profileId);
     
     // 3. Trigger Core Detection Engine
+    // We call the core detectCyberbullying function which handles RAG retrieval and threshold suppression.
     const analysis = await detectCyberbullying({
       text: input.messageText,
       relationshipType: relData.relationshipType || 'Stranger',
