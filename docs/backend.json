@@ -62,6 +62,7 @@
         "relationship": { "type": "string" },
         "interaction_history": { "type": "string" },
         "interaction_frequency": { "type": "string" },
+        "profileType": { "type": "string", "description": "The specific moderation profile this example belongs to. Use 'general' for all." },
         "label": { "type": "string" },
         "sourceFile": { "type": "string" },
         "uploadedAt": { "type": "string", "format": "date-time" }

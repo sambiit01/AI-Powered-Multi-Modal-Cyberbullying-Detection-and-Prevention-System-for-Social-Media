@@ -70,12 +70,10 @@ export default function Moderation({ addActivity }: ModerationProps) {
   useEffect(() => {
     async function syncDynamicData() {
       try {
-        // Fetch all available profiles for the dropdown
         const profilesSnap = await getDocs(collection(db, "moderationProfiles"));
         const profiles = profilesSnap.docs.map(doc => doc.id);
         if (profiles.length > 0) setAvailableProfiles(profiles);
 
-        // Fetch Global active profile to sync default lens
         const globalRef = doc(db, "adminSettings", "global");
         const globalSnap = await getDoc(globalRef);
         if (globalSnap.exists()) {
@@ -110,26 +108,9 @@ export default function Moderation({ addActivity }: ModerationProps) {
     const freq = relData.interactionFrequency || 'Occasional';
     const isBursting = !!relData.isBursting;
 
-    const examplesRef = collection(db, 'contextExamples');
-    const q = query(examplesRef, where('relationship', '==', relType), limit(3));
-    
-    let examples: any[] = [];
-    try {
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((doc) => {
-        examples.push(doc.data());
-      });
-    } catch (err: any) {
-      if (err.code === 'permission-denied') {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'contextExamples',
-          operation: 'list'
-        }));
-      }
-    }
-
+    // Retrieval now happens inside the detectCyberbullying flow on the server
     const settings = await getProfileSettings(profileId);
-    return { relType, histType, freq, isBursting, examples, ...settings };
+    return { relType, histType, freq, isBursting, ...settings };
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -163,7 +144,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
           historyType: ctx.histType,
           interactionFrequency: ctx.freq,
           isBursting: ctx.isBursting,
-          examples: ctx.examples,
+          profileId: activeProfile,
           sensitivityThreshold: ctx.sensitivityThreshold,
           banterTolerance: ctx.banterTolerance
         });
@@ -194,7 +175,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
             historyType: ctx.histType,
             interactionFrequency: ctx.freq,
             isBursting: ctx.isBursting,
-            examples: ctx.examples,
+            profileId: activeProfile,
             sensitivityThreshold: ctx.sensitivityThreshold,
             banterTolerance: ctx.banterTolerance
           });
@@ -239,6 +220,7 @@ export default function Moderation({ addActivity }: ModerationProps) {
       relationship: relType,
       interaction_history: histType,
       interaction_frequency: freq,
+      profileType: activeProfile, // Track which profile this training example belongs to
       label: correctedLabel,
       sourceFile: "Manual Correction",
       uploadedAt: new Date().toISOString()
@@ -314,6 +296,20 @@ export default function Moderation({ addActivity }: ModerationProps) {
           </CardFooter>
         </form>
       </Card>
+
+      {error && (
+        <Card className="border-destructive">
+          <CardHeader className="flex flex-row items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-destructive" />
+            <div>
+              <CardTitle className="text-destructive">Error</CardTitle>
+              <CardDescription className="text-destructive/80">
+                {error}
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
 
       {result && (
         <Card className="animate-in fade-in slide-in-from-bottom-2 border-primary/20 shadow-lg">
