@@ -22,15 +22,16 @@ const ExternalModeratorOutputSchema = z.object({
   action: z.enum(['allow', 'block']).describe('The recommended moderation action.'),
   reasoning: z.string().describe('AI provided reasoning for the decision.'),
   behavioralAlerts: z.array(z.string()).describe('Behavioral risk flags detected.'),
+  confidenceScore: z.number().describe('Numeric toxicity score.'),
 });
 
 export type ExternalModeratorOutput = z.infer<typeof ExternalModeratorOutputSchema>;
 
 /**
- * Detects if the sentiment vibe is declining rapidly based on recent history.
+ * Detects if the sentiment vibe is declining rapidly based on confidence scores.
  */
 async function analyzeSentimentDrift(senderId: string, rollingScore: number): Promise<boolean> {
-  // If the rolling score is already in danger zone, drift is established
+  // Check the relationship rolling score danger zone
   if (rollingScore < 0.4) return true;
 
   try {
@@ -41,9 +42,12 @@ async function analyzeSentimentDrift(senderId: string, rollingScore: number): Pr
       limit(10)
     );
     const snap = await getDocs(q);
-    const recentFlags = snap.docs.filter(doc => doc.data().status === 'Flagged').length;
-    // If 30% of recent messages were toxic, drift is detected
-    return recentFlags >= 3;
+    
+    // Check how many of the last 10 messages had a confidenceScore > 0.70
+    const highToxicityCount = snap.docs.filter(doc => (doc.data().confidenceScore || 0) > 0.70).length;
+    
+    // Trigger if count is 3 or higher
+    return highToxicityCount >= 3;
   } catch (e) {
     return false;
   }
@@ -76,10 +80,10 @@ const externalModeratorFlow = ai.defineFlow(
       banterTolerance: settings.banterTolerance,
     });
     
-    // 3. Update Persistence
-    await updateRelationshipBehavior(input.senderId, input.receiverId, !analysis.isCyberbullying);
+    // 3. Update Persistence using raw confidence score
+    await updateRelationshipBehavior(input.senderId, input.receiverId, analysis.confidenceScore);
 
-    // 4. Log Activity
+    // 4. Log Activity with numeric confidence
     await addDoc(collection(db, 'activities'), {
       type: 'Content',
       userId: input.senderId,
@@ -89,7 +93,8 @@ const externalModeratorFlow = ai.defineFlow(
       reasoning: analysis.reasoning,
       originalText: input.messageText,
       relType: relData.relationshipType,
-      profileId: input.profileId || 'standard'
+      profileId: input.profileId || 'standard',
+      confidenceScore: analysis.confidenceScore
     });
 
     // 5. Derive Comprehensive Alerts
@@ -114,6 +119,7 @@ const externalModeratorFlow = ai.defineFlow(
       action,
       reasoning: analysis.reasoning,
       behavioralAlerts: alerts,
+      confidenceScore: analysis.confidenceScore
     };
   }
 );

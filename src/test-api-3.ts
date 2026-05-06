@@ -13,9 +13,9 @@ import { externalModerator } from './ai/flows/external-api-moderator';
  * 3. Verify NEGATIVE_DRIFT_DETECTED alert.
  */
 async function performDriftTest() {
-  const senderId = `tester_drift_${Date.now()}`;
-  const receiverId = `target_drift_${Date.now()}`;
-  const profileId = 'educational';
+  const senderId = `samb`;
+  const receiverId = `aap`;
+  const profileId = 'professional';
 
   console.log("\n==================================================");
   console.log("🚀 SHIELDAI PHASE 5: SENTIMENT DRIFT TEST");

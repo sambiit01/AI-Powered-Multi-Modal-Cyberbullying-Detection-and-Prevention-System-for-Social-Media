@@ -1,18 +1,18 @@
 'use server';
 /**
- * @fileOverview Real-time cyberbullying detection flow.
- *
- * - realTimeCyberbullyingDetection - A function that monitors social media content in real-time to detect and flag cyberbullying incidents.
- * - RealTimeCyberbullyingDetectionInput - The input type for the realTimeCyberbullyingDetection function.
- * - RealTimeCyberbullyingDetectionOutput - The return type for the realTimeCyberbullyingDetection function.
+ * @fileOverview Real-time cyberbullying detection flow with relationship and activity persistence.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { db, updateRelationshipBehavior } from '@/lib/firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 const RealTimeCyberbullyingDetectionInputSchema = z.object({
   content: z.string().describe('The social media content to be analyzed.'),
   contentType: z.enum(['text', 'image', 'video']).describe('The type of content being analyzed.'),
+  senderId: z.string().describe('The ID of the user sending the content.'),
+  receiverId: z.string().describe('The ID of the user receiving the content.'),
   userBehaviorData: z.string().optional().describe('User behavior data to help detect cyberbullying.'),
   contextualInformation: z.string().optional().describe('Contextual information to assist in cyberbullying detection.'),
   temporalInformation: z.string().optional().describe('Temporal information related to the content.'),
@@ -25,6 +25,7 @@ const RealTimeCyberbullyingDetectionOutputSchema = z.object({
   reason: z.string().describe('The reason for the cyberbullying detection.'),
   severity: z.string().optional().describe('Severity level of the cyberbullying.'),
   suggestedAction: z.string().optional().describe('Action suggested for cyberbullying incident.'),
+  confidenceScore: z.number().describe('Toxicity score from 0-1.'),
 });
 
 export type RealTimeCyberbullyingDetectionOutput = z.infer<typeof RealTimeCyberbullyingDetectionOutputSchema>;
@@ -48,7 +49,8 @@ User Behavior Data: {{{userBehaviorData}}}
 Contextual Information: {{{contextualInformation}}}
 Temporal Information: {{{temporalInformation}}}
 
-Based on the content, content type, user behavior data, contextual and temporal information, determine if the content constitutes cyberbullying. Provide a reason for your determination, and suggest an action to take if cyberbullying is detected.
+Based on the content, content type, user behavior data, contextual and temporal information, determine if the content constitutes cyberbullying. 
+Provide a reason for your determination, a confidenceScore between 0 and 1, and suggest an action to take if cyberbullying is detected.
 
 Consider factors like threats, harassment, insults, and defamation.
 Set isCyberbullying to true if cyberbullying is detected, otherwise false.
@@ -63,6 +65,23 @@ const realTimeCyberbullyingDetectionFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await detectCyberbullyingPrompt(input);
-    return output!;
+    const result = output!;
+
+    // Persist behavior using confidence score
+    await updateRelationshipBehavior(input.senderId, input.receiverId, result.confidenceScore);
+
+    // Log Activity
+    await addDoc(collection(db, 'activities'), {
+      type: 'Content',
+      userId: input.senderId,
+      details: input.content.substring(0, 50),
+      status: result.isCyberbullying ? 'Flagged' : 'Safe',
+      date: new Date().toISOString(),
+      reasoning: result.reason,
+      originalText: input.content,
+      confidenceScore: result.confidenceScore
+    });
+
+    return result;
   }
 );

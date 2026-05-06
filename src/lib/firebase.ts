@@ -187,9 +187,9 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
 }
 
 /**
- * Updates relationship metrics after an interaction.
+ * Updates relationship metrics after an interaction using AI confidence scores.
  */
-export async function updateRelationshipBehavior(senderId: string, receiverId: string, isSafe: boolean) {
+export async function updateRelationshipBehavior(senderId: string, receiverId: string, confidenceScore: number) {
   const relId = [senderId, receiverId].sort().join('_');
   const relRef = doc(db, "relationships", relId);
   const now = Date.now();
@@ -209,11 +209,17 @@ export async function updateRelationshipBehavior(senderId: string, receiverId: s
     timestamps[senderId] = [now, ...(timestamps[senderId] || [])].slice(0, 10);
 
     let sentiment = data.rollingSentimentScore || 0.5;
-    if (isSafe) {
-      sentiment = Math.min(1.0, sentiment + 0.05);
-    } else {
-      sentiment = Math.max(0.0, sentiment - 0.15);
+    
+    // NEW SENTIMENT LOGIC: Scale-based updates
+    if (confidenceScore > 0.70) {
+      sentiment -= 0.15;
+    } else if (confidenceScore < 0.30) {
+      sentiment += 0.05;
     }
+    // Neutral scores between 0.3 and 0.7 result in no change to sentiment climate
+
+    // Clamp score between 0.0 and 1.0
+    sentiment = Math.max(0.0, Math.min(1.0, sentiment));
 
     const newLevel = calculateRelationshipLevel(totalCount, isBidirectional);
     const newHistory = sentiment > 0.8 ? 'Friendly' : (sentiment < 0.4 ? 'Hostile' : 'Neutral');

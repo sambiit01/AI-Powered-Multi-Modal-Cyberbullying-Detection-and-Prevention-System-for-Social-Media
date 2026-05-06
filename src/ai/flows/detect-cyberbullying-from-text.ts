@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Detects cyberbullying from text-based content with relationship context, 
@@ -129,19 +128,16 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     const examplesRef = collection(db, 'contextExamples');
     
     // Determine the profile type to fetch for the Firestore query
-    // If profileId is missing or 'standard', we only use 'general' examples.
-    // Otherwise, we fetch ONLY examples matching the specific profile.
     const profileToQuery = (input.profileId && input.profileId !== 'standard') 
       ? input.profileId 
       : 'general';
 
     console.log(`[SERVER: detectCyberbullyingFromTextFlow] Querying Firestore for profileType: ${profileToQuery}`);
 
-    // The Firestore query MUST ONLY fetch documents where profileType == profileId (or 'general' if standard/missing)
     const q = query(
       examplesRef, 
       where('profileType', '==', profileToQuery),
-      limit(50) // Fetch a larger batch to filter relationship in-memory
+      limit(50)
     );
     
     const examples: any[] = [];
@@ -151,9 +147,6 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
         examples.push(doc.data());
       });
       
-      // If querying for 'general' and we got no results, we might have documents with MISSING profileType.
-      // Firestore equality filters exclude documents missing the field.
-      // We'll perform a one-time check for missing fields if profileToQuery is 'general' and results are empty.
       if (profileToQuery === 'general' && examples.length === 0) {
         console.log('[SERVER: detectCyberbullyingFromTextFlow] No explicit "general" labels. Searching for documents with missing profileType.');
         const fallbackQuery = query(examplesRef, limit(50));
@@ -169,12 +162,10 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
       console.error('[SERVER: detectCyberbullyingFromTextFlow] RAG Retrieval failed:', err);
     }
 
-    // Secondary filter: find examples matching the current relationship context from the profile-specific set
     const relevantExamples = examples
       .filter(ex => (ex.relationship === input.relationshipType || ex.relationship_level === input.relationshipType))
       .slice(0, 3);
 
-    // Final result set: prefer relationship-matched ones, otherwise just the first few from the profile pool
     const finalExamples = relevantExamples.length > 0 ? relevantExamples : examples.slice(0, 3);
 
     const {output} = await detectCyberbullyingPrompt({
