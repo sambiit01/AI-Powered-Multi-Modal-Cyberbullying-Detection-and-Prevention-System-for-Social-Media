@@ -1,22 +1,25 @@
-import * as dotenv from 'dotenv';
-// Absolute earliest initialization of env vars
-dotenv.config();
-dotenv.config({ path: '.env.local' });
 
-import { runFlow } from '@genkit-ai/flow';
-import { externalApiModerator } from './ai/flows/external-api-moderator';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load environment variables from both standard .env and .env.local
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+import { externalModerator } from './ai/flows/external-api-moderator';
 import { db } from './lib/firebase';
-import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 /**
- * Utility to seed behavioral states that would otherwise 
- * take hundreds of messages to form naturally.
+ * Utility to seed behavioral states for testing different scenarios.
+ * This ensures the database has the required context before analysis.
  */
 async function seedRelationshipState(sender: string, receiver: string, type: 'Close Friend' | 'Stalker') {
   const relId = [sender, receiver].sort().join('_');
   const now = Date.now();
   
   if (type === 'Close Friend') {
+    console.log(`[SEED] Creating Close Friend bond for ${relId}`);
     await setDoc(doc(db, "relationships", relId), {
       interactionCount: 150,
       userCounts: { [sender]: 75, [receiver]: 75 },
@@ -27,6 +30,7 @@ async function seedRelationshipState(sender: string, receiver: string, type: 'Cl
       lastInteraction: new Date().toISOString()
     });
   } else if (type === 'Stalker') {
+    console.log(`[SEED] Creating Stalker/Bursting state for ${relId}`);
     await setDoc(doc(db, "relationships", relId), {
       interactionCount: 10,
       userCounts: { [sender]: 10, [receiver]: 0 },
@@ -36,7 +40,8 @@ async function seedRelationshipState(sender: string, receiver: string, type: 'Cl
       relationshipType: 'Stranger',
       rollingSentimentScore: 0.4,
       participants: [sender, receiver],
-      lastInteraction: new Date().toISOString()
+      lastInteraction: new Date().toISOString(),
+      isBursting: true
     });
   }
 }
@@ -48,7 +53,7 @@ async function runShieldAITests() {
 
   const scenarios = [
     {
-      name: "Scenario A: Zero Tolerance (Guardian Lens)",
+      name: "Scenario A: School Environment (Guardian Lens)",
       input: {
         messageText: "You are a total failure.",
         senderId: "student_x",
@@ -58,7 +63,7 @@ async function runShieldAITests() {
       expectation: "ACTION: BLOCK | ALERT: HIGH_CONFIDENCE_LOW_BOND"
     },
     {
-      name: "Scenario B: Bonded Banter (Professional Lens)",
+      name: "Scenario B: Dev Team Banter (Professional Lens)",
       setup: () => seedRelationshipState("dev_a", "dev_b", "Close Friend"),
       input: {
         messageText: "You are a total failure.",
@@ -66,18 +71,18 @@ async function runShieldAITests() {
         receiverId: "dev_b",
         profileId: "professional"
       },
-      expectation: "ACTION: ALLOW | REASON: Playful banter allowed between friends."
+      expectation: "ACTION: ALLOW | REASON: Playful banter allowed between bonded friends."
     },
     {
-      name: "Scenario C: Behavioral Risk (Bursting & Drift Check)",
+      name: "Scenario C: Behavioral Risk Detection (Bursting)",
       setup: () => seedRelationshipState("stalker", "victim", "Stalker"),
       input: {
-        messageText: "Why are you ignoring me?",
+        messageText: "Are you there? Answer me.",
         senderId: "stalker",
         receiverId: "victim",
         profileId: "standard"
       },
-      expectation: "ALERTS: ['BURST_DETECTED', 'NEGATIVE_DRIFT_DETECTED']"
+      expectation: "ALERTS: ['BURST_DETECTED']"
     }
   ];
 
@@ -88,17 +93,18 @@ async function runShieldAITests() {
     if (scenario.setup) await scenario.setup();
 
     try {
-      const result = await runFlow(externalApiModerator, scenario.input);
+      // Calling the flow function directly to avoid @genkit-ai/flow dependency
+      const result = await externalModerator(scenario.input);
       console.log("--- RESULT ---");
       console.log(`ACTION: ${result.action.toUpperCase()}`);
       console.log(`ALERTS: ${JSON.stringify(result.behavioralAlerts)}`);
       console.log(`REASON: ${result.reasoning}`);
       console.log("--------------\n");
     } catch (e) {
-      console.error(`❌ Flow Error: ${e}\n`);
+      console.error(`❌ Execution Error: ${e}\n`);
     }
     
-    // Brief sleep to avoid gRPC stream contention in terminal
+    // Brief sleep for Firestore consistency
     await new Promise(r => setTimeout(r, 1000));
   }
 

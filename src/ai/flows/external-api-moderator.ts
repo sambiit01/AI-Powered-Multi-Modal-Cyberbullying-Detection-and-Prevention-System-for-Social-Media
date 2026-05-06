@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview External API Moderator Wrapper for ShieldAI.
@@ -79,7 +80,7 @@ const externalModeratorFlow = ai.defineFlow(
       banterTolerance: settings.banterTolerance,
     });
     
-    // 3. Update Database Persistence (Awaited for sequential test consistency)
+    // 3. Update Database Persistence
     await updateRelationshipBehavior(input.senderId, input.receiverId, !analysis.isCyberbullying);
 
     // 4. Log the activity for historical tracking
@@ -106,7 +107,7 @@ const externalModeratorFlow = ai.defineFlow(
     if (isDrifting) alerts.push('NEGATIVE_DRIFT_DETECTED');
 
     // HIGH_CONFIDENCE_LOW_BOND: Strong flagging on Strangers
-    if (analysis.isCyberbullying && analysis.confidenceScore > 0.85 && relData.relationshipType === 'Stranger') {
+    if (analysis.isCyberbullying && (analysis.confidenceScore || 0) > 0.85 && relData.relationshipType === 'Stranger') {
       alerts.push('HIGH_CONFIDENCE_LOW_BOND');
     }
 
