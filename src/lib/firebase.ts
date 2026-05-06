@@ -1,26 +1,15 @@
-
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { 
-  getFirestore, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  increment,
-  collection,
-  query,
-  where,
-  limit,
-  getDocs,
-  Timestamp 
-} from "firebase/firestore";
-
-// Ensure environment variables are loaded for CLI environments
 import * as dotenv from 'dotenv';
 dotenv.config();
 dotenv.config({ path: '.env.local' });
 
+// Import the functions you need from the SDKs you need
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
+// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -30,16 +19,21 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+// Initialize Firebase
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
 
-/**
- * We export a getter or lazy initializer for Auth to prevent 
- * "invalid-api-key" errors during terminal initialization if 
- * the env vars are slightly out of sync.
- */
+// Safely export auth for terminal environments
 export const auth = firebaseConfig.apiKey ? getAuth(app) : (null as any);
 export const db = getFirestore(app);
 
+/**
+ * Interface for Admin/Moderation Settings
+ */
 export interface AdminSettings {
   profileType: string;
   sensitivityThreshold: number;
@@ -47,13 +41,17 @@ export interface AdminSettings {
   updatedAt: string;
 }
 
+/**
+ * Interface for Global App Configuration
+ */
 export interface GlobalConfig {
   defaultProfileId: string;
   updatedAt: string;
 }
 
 /**
- * Fetches moderation settings for a profile.
+ * Fetches moderation settings for a specific profile.
+ * Defaults to the global default profile if no profileId is provided.
  */
 export async function getProfileSettings(profileId?: string): Promise<AdminSettings> {
   let targetId = profileId;
@@ -63,10 +61,11 @@ export async function getProfileSettings(profileId?: string): Promise<AdminSetti
       const globalRef = doc(db, "adminSettings", "global");
       const globalSnap = await getDoc(globalRef);
       if (globalSnap.exists()) {
-        targetId = (globalSnap.data() as GlobalConfig).defaultProfileId;
+        const config = globalSnap.data() as GlobalConfig;
+        targetId = config.defaultProfileId;
       }
     } catch (e) {
-      targetId = 'standard';
+      // Fallback
     }
   }
 
@@ -77,112 +76,163 @@ export async function getProfileSettings(profileId?: string): Promise<AdminSetti
     const profileSnap = await getDoc(profileRef);
     if (profileSnap.exists()) {
       return profileSnap.data() as AdminSettings;
+    } else {
+      return {
+        profileType: targetId,
+        sensitivityThreshold: 85,
+        banterTolerance: 75,
+        updatedAt: new Date().toISOString()
+      };
     }
-    
-    // Return hardcoded defaults for simulation if DB is empty
-    const defaults: Record<string, AdminSettings> = {
-      guardian: { profileType: 'guardian', sensitivityThreshold: 40, banterTolerance: 10, updatedAt: '' },
-      professional: { profileType: 'professional', sensitivityThreshold: 90, banterTolerance: 90, updatedAt: '' },
-      educational: { profileType: 'educational', sensitivityThreshold: 60, banterTolerance: 50, updatedAt: '' },
-      standard: { profileType: 'standard', sensitivityThreshold: 85, banterTolerance: 75, updatedAt: '' }
-    };
-    return defaults[targetId] || defaults.standard;
-  } catch (error) {
-    return { profileType: targetId, sensitivityThreshold: 85, banterTolerance: 75, updatedAt: '' };
+  } catch (error: any) {
+    if (error.code === 'permission-denied') {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: profileRef.path,
+        operation: 'get'
+      }));
+    }
+    throw error;
   }
 }
 
 /**
- * Maps interaction count and reciprocation to relationship level.
+ * Maps interaction count to relationship level.
  */
-function calculateRelationshipLevel(totalCount: number, user1Count: number, user2Count: number): string {
-  const isBidirectional = user1Count > 0 && user2Count > 0;
-  if (!isBidirectional && totalCount < 10) return 'Stranger';
-  if (totalCount <= 20) return 'Acquaintance';
-  if (totalCount <= 100) return 'Frequent Contact';
+function calculateRelationshipLevel(totalCount: number, isBidirectional: boolean): string {
+  const effectiveCount = isBidirectional ? totalCount * 2 : totalCount;
+  if (effectiveCount <= 5) return 'Stranger';
+  if (effectiveCount <= 50) return 'Acquaintance';
+  if (effectiveCount <= 200) return 'Frequent Contact';
   return 'Close Friend';
 }
 
 /**
- * Detects if a user is flooding messages.
+ * Calculates interaction frequency based on timing and volume.
  */
-function calculateIsBursting(timestamps: number[]): boolean {
-  if (timestamps.length < 5) return false;
+function calculateInteractionFrequency(count: number, lastInteractionIso: string): string {
+  if (count <= 1) return 'One-time';
+  
+  const lastDate = new Date(lastInteractionIso).getTime();
   const now = Date.now();
-  const recentCount = timestamps.filter(ts => ts > now - 60000).length;
-  return recentCount >= 5;
+  const diffHours = (now - lastDate) / (1000 * 60 * 60);
+
+  if (diffHours < 48 && count > 5) return 'Often';
+  return 'Occasional';
 }
 
 /**
- * Fetches/Updates relationship metadata.
+ * Calculates if a user is currently bursting (flooding messages).
+ */
+function calculateIsBursting(timestamps: { [uid: string]: number[] }, senderId: string, receiverId: string): boolean {
+  const now = Date.now();
+  const senderTimestamps = timestamps[senderId] || [];
+  const receiverTimestamps = timestamps[receiverId] || [];
+  
+  if (senderTimestamps.length >= 10) {
+    const twoMinutesAgo = now - 120000;
+    const tenthMessageTs = senderTimestamps[9] || 0;
+    const sentTenInTwoMins = tenthMessageTs > twoMinutesAgo;
+    const receiverInactive = !receiverTimestamps.some(ts => ts > twoMinutesAgo);
+    return sentTenInTwoMins && receiverInactive;
+  }
+  return false;
+}
+
+/**
+ * Fetches or creates a relationship document between two users.
  */
 export async function getOrCreateRelationship(senderId: string, receiverId: string) {
   const relId = [senderId, receiverId].sort().join('_');
   const relRef = doc(db, "relationships", relId);
   
-  const relSnap = await getDoc(relRef);
-  const now = Date.now();
+  try {
+    const relDoc = await getDoc(relRef);
 
-  if (relSnap.exists()) {
-    const data = relSnap.data();
-    const timestamps = [now, ...(data.messageTimestamps?.[senderId] || [])].slice(0, 10);
-    const isBursting = calculateIsBursting(timestamps);
-    
-    return {
-      ...data,
-      isBursting,
-      relationshipType: calculateRelationshipLevel(
-        data.interactionCount || 0, 
-        data.userCounts?.[senderId] || 0, 
-        data.userCounts?.[receiverId] || 0
-      )
-    };
-  } else {
-    const initial = {
-      interactionCount: 0,
-      userCounts: { [senderId]: 0, [receiverId]: 0 },
-      relationshipType: 'Stranger',
-      historyType: 'Neutral',
-      interactionFrequency: 'Normal',
-      isBursting: false,
-      rollingSentimentScore: 0.5,
-      participants: [senderId, receiverId],
-      lastInteraction: new Date().toISOString()
-    };
-    await setDoc(relRef, initial);
-    return { ...initial, isBursting: false };
+    if (relDoc.exists()) {
+      const data = relDoc.data();
+      const isBursting = calculateIsBursting(data.messageTimestamps || {}, senderId, receiverId);
+      const frequency = data.interactionFrequency || calculateInteractionFrequency(data.interactionCount || 0, data.lastInteraction || new Date().toISOString());
+
+      return {
+        ...data,
+        isBursting,
+        interactionFrequency: isBursting ? 'High (Bursting)' : frequency
+      };
+    } else {
+      const initialData = {
+        interactionCount: 0,
+        userCounts: { [senderId]: 0, [receiverId]: 0 },
+        relationshipType: 'Stranger',
+        historyType: 'Neutral',
+        interactionFrequency: 'One-time',
+        rollingSentimentScore: 0.5,
+        messageTimestamps: { [senderId]: [], [receiverId]: [] },
+        participants: [senderId, receiverId],
+        lastInteraction: new Date().toISOString(),
+        isBursting: false
+      };
+      
+      await setDoc(relRef, initialData);
+      return { ...initialData, isBursting: false };
+    }
+  } catch (error: any) {
+    if (error.code === 'permission-denied') {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: relRef.path,
+        operation: 'get'
+      }));
+    }
+    throw error;
   }
 }
 
 /**
- * Updates behavioral metrics.
+ * Updates relationship metrics after an interaction.
  */
 export async function updateRelationshipBehavior(senderId: string, receiverId: string, isSafe: boolean) {
   const relId = [senderId, receiverId].sort().join('_');
   const relRef = doc(db, "relationships", relId);
+  const now = Date.now();
 
-  const currentTS: any = {};
-  currentTS[senderId] = [Date.now()];
+  try {
+    const relDoc = await getDoc(relRef);
+    if (!relDoc.exists()) return;
 
-  const userCounts: any = {};
-  userCounts[senderId] = increment(1);
+    const data = relDoc.data();
+    const userCounts = data.userCounts || { [senderId]: 0, [receiverId]: 0 };
+    userCounts[senderId] = (userCounts[senderId] || 0) + 1;
 
-  let sentimentDelta = isSafe ? 0.02 : -0.15;
+    const totalCount = (data.interactionCount || 0) + 1;
+    const isBidirectional = (userCounts[senderId] > 0 && userCounts[receiverId] > 0);
+    
+    const timestamps = data.messageTimestamps || { [senderId]: [], [receiverId]: [] };
+    timestamps[senderId] = [now, ...(timestamps[senderId] || [])].slice(0, 10);
 
-  await setDoc(relRef, {
-    interactionCount: increment(1),
-    userCounts,
-    messageTimestamps: currentTS,
-    lastInteraction: new Date().toISOString(),
-    // We update the score if it exists, otherwise it's handled by merge
-  }, { merge: true });
+    let sentiment = data.rollingSentimentScore || 0.5;
+    if (isSafe) {
+      sentiment = Math.min(1.0, sentiment + 0.05);
+    } else {
+      sentiment = Math.max(0.0, sentiment - 0.15);
+    }
 
-  // Update rolling sentiment with a separate fetch to be safe
-  const snap = await getDoc(relRef);
-  if (snap.exists()) {
-    const currentScore = snap.data().rollingSentimentScore || 0.5;
+    const newLevel = calculateRelationshipLevel(totalCount, isBidirectional);
+    const newHistory = sentiment > 0.8 ? 'Friendly' : (sentiment < 0.4 ? 'Hostile' : 'Neutral');
+    const newLastInteraction = new Date().toISOString();
+    const newFrequency = calculateInteractionFrequency(totalCount, newLastInteraction);
+    const isBursting = calculateIsBursting(timestamps, senderId, receiverId);
+
     await updateDoc(relRef, {
-      rollingSentimentScore: Math.max(0, Math.min(1, currentScore + sentimentDelta))
+      interactionCount: increment(1),
+      userCounts,
+      messageTimestamps: timestamps,
+      rollingSentimentScore: sentiment,
+      relationshipType: newLevel,
+      historyType: newHistory,
+      interactionFrequency: newFrequency,
+      lastInteraction: newLastInteraction,
+      isBursting: isBursting
     });
+  } catch (err) {
+    console.error("[DATABASE] Error updating behavior metrics:", err);
   }
 }

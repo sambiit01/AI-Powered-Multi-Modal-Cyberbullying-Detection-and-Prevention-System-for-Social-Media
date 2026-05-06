@@ -1,16 +1,13 @@
-
 'use server';
 /**
- * @fileOverview External API Moderator Wrapper for ShieldAI.
- * Orchestrates multi-modal detection, behavioral drift analysis, 
- * and relationship metadata management.
+ * @fileOverview External API Moderator for ShieldAI with Behavioral Intelligence.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { getOrCreateRelationship, getProfileSettings, updateRelationshipBehavior, db } from '@/lib/firebase';
 import { detectCyberbullying } from './detect-cyberbullying-from-text';
-import { collection, query, where, limit, getDocs, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs, addDoc } from 'firebase/firestore';
 
 const ExternalModeratorInputSchema = z.object({
   messageText: z.string().describe('The content to moderate.'),
@@ -30,24 +27,23 @@ const ExternalModeratorOutputSchema = z.object({
 export type ExternalModeratorOutput = z.infer<typeof ExternalModeratorOutputSchema>;
 
 /**
- * Detects if the sentiment vibe is declining rapidly.
+ * Detects if the sentiment vibe is declining rapidly based on recent history.
  */
-async function analyzeSentimentDrift(senderId: string, receiverId: string, currentRollingScore: number): Promise<boolean> {
-  // Check 1: Direct Rolling Score Check (The "Vibe" Check)
-  if (currentRollingScore < 0.4) return true;
+async function analyzeSentimentDrift(senderId: string, rollingScore: number): Promise<boolean> {
+  // If the rolling score is already in danger zone, drift is established
+  if (rollingScore < 0.4) return true;
 
-  // Check 2: Historical Flag Check (The "Trend" Check)
   try {
     const activitiesRef = collection(db, 'activities');
     const q = query(
       activitiesRef, 
       where('userId', '==', senderId),
-      orderBy('date', 'desc'),
-      limit(5)
+      limit(10)
     );
     const snap = await getDocs(q);
     const recentFlags = snap.docs.filter(doc => doc.data().status === 'Flagged').length;
-    return recentFlags >= 2; // Drift detected if 2 of last 5 were toxic
+    // If 30% of recent messages were toxic, drift is detected
+    return recentFlags >= 3;
   } catch (e) {
     return false;
   }
@@ -64,7 +60,7 @@ const externalModeratorFlow = ai.defineFlow(
     outputSchema: ExternalModeratorOutputSchema,
   },
   async (input) => {
-    // 1. Context Lookup (Fetch from DB or Create if Missing)
+    // 1. Context Lookup
     const relData = await getOrCreateRelationship(input.senderId, input.receiverId);
     const settings = await getProfileSettings(input.profileId);
     
@@ -80,10 +76,10 @@ const externalModeratorFlow = ai.defineFlow(
       banterTolerance: settings.banterTolerance,
     });
     
-    // 3. Update Database Persistence
+    // 3. Update Persistence
     await updateRelationshipBehavior(input.senderId, input.receiverId, !analysis.isCyberbullying);
 
-    // 4. Log the activity for historical tracking
+    // 4. Log Activity
     await addDoc(collection(db, 'activities'), {
       type: 'Content',
       userId: input.senderId,
@@ -99,20 +95,16 @@ const externalModeratorFlow = ai.defineFlow(
     // 5. Derive Comprehensive Alerts
     const alerts: string[] = [];
     
-    // BURST_DETECTED: Frequency flooding
     if (relData.isBursting) alerts.push('BURST_DETECTED');
     
-    // NEGATIVE_DRIFT_DETECTED: Falling sentiment score
-    const isDrifting = await analyzeSentimentDrift(input.senderId, input.receiverId, relData.rollingSentimentScore || 0.5);
+    const isDrifting = await analyzeSentimentDrift(input.senderId, relData.rollingSentimentScore || 0.5);
     if (isDrifting) alerts.push('NEGATIVE_DRIFT_DETECTED');
 
-    // HIGH_CONFIDENCE_LOW_BOND: Strong flagging on Strangers
-    if (analysis.isCyberbullying && (analysis.confidenceScore || 0) > 0.85 && relData.relationshipType === 'Stranger') {
+    if (analysis.isCyberbullying && analysis.confidenceScore > 0.85 && relData.relationshipType === 'Stranger') {
       alerts.push('HIGH_CONFIDENCE_LOW_BOND');
     }
 
-    // NEGATIVE_HISTORY_DETECTED: Chronic toxicity
-    if ((relData.rollingSentimentScore || 0.5) < 0.3) {
+    if ((relData.rollingSentimentScore || 0.5) < 0.35) {
       alerts.push('NEGATIVE_HISTORY_DETECTED');
     }
 
