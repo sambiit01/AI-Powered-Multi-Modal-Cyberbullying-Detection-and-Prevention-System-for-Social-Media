@@ -11,7 +11,11 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "upload-context": "tsx src/scripts/upload-context.ts"
+    "upload-context": "tsx src/scripts/upload-context.ts",
+    "test:suite": "tsx src/test-api-suite.ts",
+    "test:api": "tsx src/test-api-final.ts",
+    "test:drift": "tsx src/test-api-2.ts",
+    "test:drift3": "tsx src/test-api-3.ts"
   },
   "dependencies": {
     "@genkit-ai/firebase": "1.29.0",

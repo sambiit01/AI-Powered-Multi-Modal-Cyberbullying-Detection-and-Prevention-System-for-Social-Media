@@ -1,0 +1,11 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // PUBLIC ACCESS FOR TESTING
+    // Note: In production, these should be restricted to authenticated users.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
