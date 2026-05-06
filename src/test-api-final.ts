@@ -1,105 +1,110 @@
-
 import * as dotenv from 'dotenv';
+// Absolute earliest initialization of env vars
 dotenv.config();
 dotenv.config({ path: '.env.local' });
 
 import { runFlow } from '@genkit-ai/flow';
 import { externalApiModerator } from './ai/flows/external-api-moderator';
 import { db } from './lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 
-async function seedTestData() {
-  console.log("🌱 SEEDING TEST DATA FOR SCENARIOS...");
-  
-  // Seed a 'Close Friend' bond for Scenario B
-  const devRelId = ['dev_1', 'dev_2'].sort().join('_');
-  await setDoc(doc(db, "relationships", devRelId), {
-    interactionCount: 150,
-    userCounts: { dev_1: 75, dev_2: 75 },
-    relationshipType: 'Close Friend',
-    historyType: 'Friendly',
-    interactionFrequency: 'Frequent',
-    rollingSentimentScore: 0.9,
-    participants: ['dev_1', 'dev_2'],
-    lastInteraction: new Date().toISOString()
-  });
-
-  // Seed a 'Bursting' scenario for Scenario C (Flooding timestamps)
-  const stalkerRelId = ['stalker_user', 'target_user'].sort().join('_');
+/**
+ * Utility to seed behavioral states that would otherwise 
+ * take hundreds of messages to form naturally.
+ */
+async function seedRelationshipState(sender: string, receiver: string, type: 'Close Friend' | 'Stalker') {
+  const relId = [sender, receiver].sort().join('_');
   const now = Date.now();
-  await setDoc(doc(db, "relationships", stalkerRelId), {
-    interactionCount: 10,
-    userCounts: { stalker_user: 10, target_user: 0 },
-    messageTimestamps: { 
-      stalker_user: [now, now-1000, now-2000, now-3000, now-4000] 
-    },
-    relationshipType: 'Stranger',
-    historyType: 'Neutral',
-    interactionFrequency: 'Sporadic',
-    participants: ['stalker_user', 'target_user'],
-    lastInteraction: new Date().toISOString()
-  });
-
-  console.log("✅ Seeding complete.\n");
-}
-
-async function runShieldAITests() {
-  console.log("🛡️ SHIELDAI EXTERNAL API TEST SUITE\n");
-
-  await seedTestData();
-
-  const testCases = [
-    {
-      name: "Scenario A: School Environment (Guardian Lens)",
-      input: {
-        messageText: "You are a total failure.",
-        senderId: "student_1",
-        receiverId: "student_2",
-        profileId: "guardian"
+  
+  if (type === 'Close Friend') {
+    await setDoc(doc(db, "relationships", relId), {
+      interactionCount: 150,
+      userCounts: { [sender]: 75, [receiver]: 75 },
+      relationshipType: 'Close Friend',
+      historyType: 'Friendly',
+      rollingSentimentScore: 0.9,
+      participants: [sender, receiver],
+      lastInteraction: new Date().toISOString()
+    });
+  } else if (type === 'Stalker') {
+    await setDoc(doc(db, "relationships", relId), {
+      interactionCount: 10,
+      userCounts: { [sender]: 10, [receiver]: 0 },
+      messageTimestamps: { 
+        [sender]: [now, now-1000, now-2000, now-3000, now-4000] 
       },
-      expectation: "Should BLOCK due to strict zero-tolerance thresholds."
-    },
-    {
-      name: "Scenario B: Dev Team Banter (Professional Lens)",
-      input: {
-        messageText: "You are a total failure.",
-        senderId: "dev_1",
-        receiverId: "dev_2",
-        profileId: "professional"
-      },
-      expectation: "Should ALLOW because professional lens permits higher banter between bonded pairs."
-    },
-    {
-      name: "Scenario C: Behavioral Risk Detection (Bursting)",
-      input: {
-        messageText: "Are you there?",
-        senderId: "stalker_user",
-        receiverId: "target_user",
-        profileId: "standard"
-      },
-      expectation: "Should ALLOW message but return ['BURST_DETECTED'] in behavioralAlerts."
-    }
-  ];
-
-  for (const scenario of testCases) {
-    console.log(`▶️ Testing: ${scenario.name}`);
-    console.log(`💡 Expectation: ${scenario.expectation}`);
-    
-    try {
-      const result = await runFlow(externalApiModerator, scenario.input);
-      
-      console.log("--- API RESPONSE ---");
-      console.log(`ACTION: ${result.action.toUpperCase()}`);
-      console.log(`REASONING: ${result.reasoning}`);
-      console.log(`ALERTS: ${JSON.stringify(result.behavioralAlerts)}`);
-      console.log("--------------------\n");
-    } catch (error) {
-      console.error(`❌ Error running flow: ${error}\n`);
-    }
+      relationshipType: 'Stranger',
+      rollingSentimentScore: 0.4,
+      participants: [sender, receiver],
+      lastInteraction: new Date().toISOString()
+    });
   }
 }
 
-runShieldAITests().catch(err => {
-  console.error("CRITICAL ERROR:", err);
-  process.exit(1);
-});
+async function runShieldAITests() {
+  console.log("\n============================================================");
+  console.log("🛡️ SHIELDAI EXTERNAL API COMPREHENSIVE SUITE");
+  console.log("============================================================\n");
+
+  const scenarios = [
+    {
+      name: "Scenario A: Zero Tolerance (Guardian Lens)",
+      input: {
+        messageText: "You are a total failure.",
+        senderId: "student_x",
+        receiverId: "student_y",
+        profileId: "guardian"
+      },
+      expectation: "ACTION: BLOCK | ALERT: HIGH_CONFIDENCE_LOW_BOND"
+    },
+    {
+      name: "Scenario B: Bonded Banter (Professional Lens)",
+      setup: () => seedRelationshipState("dev_a", "dev_b", "Close Friend"),
+      input: {
+        messageText: "You are a total failure.",
+        senderId: "dev_a",
+        receiverId: "dev_b",
+        profileId: "professional"
+      },
+      expectation: "ACTION: ALLOW | REASON: Playful banter allowed between friends."
+    },
+    {
+      name: "Scenario C: Behavioral Risk (Bursting & Drift Check)",
+      setup: () => seedRelationshipState("stalker", "victim", "Stalker"),
+      input: {
+        messageText: "Why are you ignoring me?",
+        senderId: "stalker",
+        receiverId: "victim",
+        profileId: "standard"
+      },
+      expectation: "ALERTS: ['BURST_DETECTED', 'NEGATIVE_DRIFT_DETECTED']"
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    console.log(`▶️ EXECUTING: ${scenario.name}`);
+    console.log(`💡 EXPECTED: ${scenario.expectation}`);
+
+    if (scenario.setup) await scenario.setup();
+
+    try {
+      const result = await runFlow(externalApiModerator, scenario.input);
+      console.log("--- RESULT ---");
+      console.log(`ACTION: ${result.action.toUpperCase()}`);
+      console.log(`ALERTS: ${JSON.stringify(result.behavioralAlerts)}`);
+      console.log(`REASON: ${result.reasoning}`);
+      console.log("--------------\n");
+    } catch (e) {
+      console.error(`❌ Flow Error: ${e}\n`);
+    }
+    
+    // Brief sleep to avoid gRPC stream contention in terminal
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  console.log("============================================================");
+  console.log("🏁 TEST SUITE COMPLETE");
+  console.log("============================================================\n");
+}
+
+runShieldAITests().catch(console.error);
