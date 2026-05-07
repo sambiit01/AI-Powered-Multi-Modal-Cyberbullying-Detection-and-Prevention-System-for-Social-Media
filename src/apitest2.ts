@@ -8,12 +8,12 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 import { externalModerator } from './ai/flows/external-api-moderator';
 
 async function runMasterTest() {
-  const senderId = `biri`;
-  const receiverId = `churut`;
-  const profileId = 'professional'; 
+  const senderId = `samb`;
+  const receiverId = `aap`;
+  const profileId = 'educational'; 
 
   const messages = [
-    { text: "You shoud get laid motherfucker.", type: "Friendly" },
+    { text: "Hey team, let's get this done.", type: "Friendly" },
     { text: "You're doing a great job.", type: "Friendly" },
     { text: "I'm not sure about your last commit.", type: "Neutral" },
     { text: "Honestly, your logic is kind of stupid lol.", type: "Toxic/Banter" }, 
@@ -29,8 +29,9 @@ async function runMasterTest() {
   console.log(`🚀 SHIELDAI 10-MESSAGE STRESS TEST [Profile: ${profileId}]`);
   console.log(`Target: ${senderId} -> ${receiverId}`);
   console.log("==================================================\n");
-
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
   for (let i = 0; i < messages.length; i++) {
+    await delay(10000);
     console.log(`--- Message ${i + 1}: "${messages[i].text}" ---`);
     
     try {
@@ -54,6 +55,7 @@ async function runMasterTest() {
     } catch (err) {
       console.error(`❌ Error at message ${i + 1}:`, err);
     }
+    console.log(`Waiting for 10 seconds`);
   }
 
   console.log("\n==================================================");
