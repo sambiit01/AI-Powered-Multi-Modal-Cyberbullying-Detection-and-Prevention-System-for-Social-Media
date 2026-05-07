@@ -36,12 +36,10 @@ export async function detectCyberbullying(
   input: DetectCyberbullyingFromTextInput
 ): Promise<DetectCyberbullyingFromTextOutput> {
   console.log('[SERVER: detectCyberbullying] >>> STARTING BEHAVIORAL ANALYSIS');
-  console.log('[SERVER: detectCyberbullying] PROFILE:', input.profileId);
   
   const result = await detectCyberbullyingFromTextFlow(input);
 
   const thresholdAsDecimal = input.sensitivityThreshold / 100;
-  console.log(`SHIELDAI_DEBUG: Effective Threshold ${thresholdAsDecimal}`);
 
   if (result.isCyberbullying && result.confidenceScore < thresholdAsDecimal) {
     return {
@@ -122,17 +120,11 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     outputSchema: DetectCyberbullyingFromTextOutputSchema,
   },
   async input => {
-    // Perform RAG Retrieval from contextExamples
-    console.log(`[SERVER: detectCyberbullyingFromTextFlow] Profile: ${input.profileId} | Relationship: ${input.relationshipType}`);
-    
     const examplesRef = collection(db, 'contextExamples');
     
-    // Determine the profile type to fetch for the Firestore query
     const profileToQuery = (input.profileId && input.profileId !== 'standard') 
       ? input.profileId 
       : 'general';
-
-    console.log(`[SERVER: detectCyberbullyingFromTextFlow] Querying Firestore for profileType: ${profileToQuery}`);
 
     const q = query(
       examplesRef, 
@@ -148,7 +140,6 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
       });
       
       if (profileToQuery === 'general' && examples.length === 0) {
-        console.log('[SERVER: detectCyberbullyingFromTextFlow] No explicit "general" labels. Searching for documents with missing profileType.');
         const fallbackQuery = query(examplesRef, limit(50));
         const fallbackSnap = await getDocs(fallbackQuery);
         fallbackSnap.forEach((doc) => {
@@ -174,7 +165,7 @@ const detectCyberbullyingFromTextFlow = ai.defineFlow(
     });
     
     if (!output) {
-      throw new Error('The AI model failed to return a result. This may be due to safety filters blocking the content.');
+      throw new Error('The AI model failed to return a result.');
     }
     return output!;
   }

@@ -188,6 +188,7 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
 
 /**
  * Updates relationship metrics after an interaction using numeric toxicity scores.
+ * @param toxicityScore 1.0 (Most Toxic) to 0.0 (Most Friendly)
  */
 export async function updateRelationshipBehavior(senderId: string, receiverId: string, toxicityScore: number) {
   const relId = [senderId, receiverId].sort().join('_');

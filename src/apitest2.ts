@@ -8,12 +8,12 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 import { externalModerator } from './ai/flows/external-api-moderator';
 
 async function runMasterTest() {
-  const senderId = `user_alpha_${Date.now()}`;
-  const receiverId = `user_beta_${Date.now()}`;
+  const senderId = `biri`;
+  const receiverId = `churut`;
   const profileId = 'professional'; 
 
   const messages = [
-    { text: "Hey team, let's get this done.", type: "Friendly" },
+    { text: "You shoud get laid motherfucker.", type: "Friendly" },
     { text: "You're doing a great job.", type: "Friendly" },
     { text: "I'm not sure about your last commit.", type: "Neutral" },
     { text: "Honestly, your logic is kind of stupid lol.", type: "Toxic/Banter" }, 

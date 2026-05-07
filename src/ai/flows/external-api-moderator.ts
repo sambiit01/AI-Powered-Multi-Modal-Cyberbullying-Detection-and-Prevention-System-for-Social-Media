@@ -8,7 +8,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { getOrCreateRelationship, getProfileSettings, updateRelationshipBehavior, db } from '@/lib/firebase';
 import { detectCyberbullying } from './detect-cyberbullying-from-text';
-import { collection, query, where, limit, getDocs, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs, addDoc } from 'firebase/firestore';
 
 const ExternalModeratorInputSchema = z.object({
   messageText: z.string().describe('The content to moderate.'),
@@ -31,21 +31,30 @@ export type ExternalModeratorOutput = z.infer<typeof ExternalModeratorOutputSche
 
 /**
  * Detects if the sentiment vibe is declining rapidly based on toxicity frequency for a specific pair.
+ * Uses in-memory sorting to bypass Firestore composite index requirements.
  */
 async function analyzeSentimentDrift(senderId: string, receiverId: string): Promise<boolean> {
   try {
     const activitiesRef = collection(db, 'activities');
+    // Fetch recent logs for this pair without a server-side order to avoid index issues
     const q = query(
       activitiesRef, 
       where('userId', '==', senderId),
       where('receiverId', '==', receiverId),
-      orderBy('date', 'desc'),
-      limit(10)
+      limit(50) 
     );
     const snap = await getDocs(q);
     
+    // Perform manual sort in memory
+    const sortedDocs = snap.docs.sort((a, b) => {
+      const dateA = new Date(a.data().date).getTime();
+      const dateB = new Date(b.data().date).getTime();
+      return dateB - dateA;
+    });
+
     // Check how many of the last 10 messages for this pair have a toxicityScore > 0.70
-    const highToxicityCount = snap.docs.filter(doc => (doc.data().toxicityScore || 0) > 0.70).length;
+    const recentMessages = sortedDocs.slice(0, 10);
+    const highToxicityCount = recentMessages.filter(doc => (doc.data().toxicityScore || 0) > 0.70).length;
     
     // Trigger if count is 3 or higher (30% or more of recent pair history is toxic)
     return highToxicityCount >= 3;
@@ -83,8 +92,8 @@ const externalModeratorFlow = ai.defineFlow(
     });
 
     // 3. Directional Toxicity Calculation
-    // If bullying is detected, toxicity is the confidence score. 
-    // If safe, toxicity is 1 - confidence (inverse of safety confidence).
+    // High confidence of bullying = High Toxicity
+    // Low confidence of bullying (High safety) = Low Toxicity
     const toxicityScore = analysis.isCyberbullying 
       ? analysis.confidenceScore 
       : Math.max(0.1, 1 - analysis.confidenceScore);
@@ -111,19 +120,15 @@ const externalModeratorFlow = ai.defineFlow(
     // 6. Derive Comprehensive Behavioral Alerts
     const alerts: string[] = [];
     
-    // Alert A: Flooding behavior
     if (relData.isBursting) alerts.push('BURST_DETECTED');
     
-    // Alert B: Negative Drift (High frequency toxicity in recent messages for this pair)
     const isDrifting = await analyzeSentimentDrift(input.senderId, input.receiverId);
     if (isDrifting) alerts.push('NEGATIVE_DRIFT_DETECTED');
 
-    // Alert C: High Toxicity between Strangers
     if (analysis.isCyberbullying && analysis.confidenceScore > 0.85 && relData.relationshipType === 'Stranger') {
       alerts.push('HIGH_CONFIDENCE_LOW_BOND');
     }
 
-    // Alert D: Chronic Hostility (Climate check)
     if ((relData.rollingSentimentScore || 0.5) < 0.35) {
       alerts.push('NEGATIVE_HISTORY_DETECTED');
     }
