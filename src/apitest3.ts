@@ -10,47 +10,51 @@ import { db } from './lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 /**
- * SHIELDAI: SENTIMENT DRIFT STRESS TEST (PHASE 5)
+ * SHIELDAI: CROSS-PAIR BEHAVIORAL AUDIT (PHASE 5)
  * 
  * Objectives:
- * 1. Establish a unique relationship context using requested IDs.
- * 2. Simulate an attack sequence to degrade rolling sentiment.
- * 3. Verify that a neutral "Pulse" message triggers the NEGATIVE_DRIFT_DETECTED alert.
- * 4. Print all database parameters and internal processes to the console.
+ * 1. Simulate alternating interactions between one sender and two different targets.
+ * 2. Verify that drift logic is 'Pair-Locked' (Toxic history with User B doesn't affect User C).
+ * 3. Print the last 10 toxicity scores for each pair to show the AI's audit trail.
  */
-async function runDriftStressTest() {
-  // Reinstating requested IDs
-  const senderId = "MmOCEqXDe6VeaNoM6RAcOSE1Dkz2";
-  const receiverId = "anonymous_reciever2";
+async function runCrossPairDriftTest() {
+  const userA = "MmOCEqXDe6VeaNoM6RAcOSE1Dkz2";
+  const userB = "target_user_toxic_B";
+  const userC = "target_user_healthy_C";
   const profileId = 'educational'; 
 
+  const conversationQueue = [
+    { from: userA, to: userB, text: "You're honestly so slow at this.", type: "TOXIC" },
+    { from: userA, to: userC, text: "Great job on that presentation, Charlie!", type: "HEALTHY" },
+    { from: userA, to: userB, text: "I can't believe we have to work together.", type: "TOXIC" },
+    { from: userA, to: userC, text: "Thanks for the help earlier.", type: "HEALTHY" },
+    { from: userA, to: userB, text: "You are a complete waste of desk space.", type: "TOXIC" },
+    { from: userA, to: userC, text: "Lunch later? My treat.", type: "HEALTHY" },
+    { from: userA, to: userB, text: "Just stay out of my way, idiot.", type: "TOXIC" }, // Should trigger Drift for B
+    { from: userA, to: userC, text: "You're the best, Charlie.", type: "HEALTHY" },   // Should NOT trigger Drift for C
+  ];
+
   console.log("\n==================================================");
-  console.log("🛡️ SHIELDAI: BEHAVIORAL DRIFT SIMULATION");
-  console.log(`[PROCESS] Sender: ${senderId}`);
-  console.log(`[PROCESS] Receiver: ${receiverId}`);
-  console.log(`[PROCESS] Profile: ${profileId}`);
+  console.log("🛡️ SHIELDAI: CROSS-PAIR BEHAVIORAL SIMULATION");
+  console.log(`[PROCESS] Main Sender: ${userA}`);
+  console.log(`[PROCESS] Target B (Toxic): ${userB}`);
+  console.log(`[PROCESS] Target C (Healthy): ${userC}`);
   console.log("==================================================\n");
 
   /**
    * Helper to fetch and print the relationship state from Firestore.
    */
-  const logRelationshipParams = async (stage: string) => {
-    const relId = [senderId, receiverId].sort().join('_');
+  const logRelationshipParams = async (sender: string, receiver: string, label: string) => {
+    const relId = [sender, receiver].sort().join('_');
     const relRef = doc(db, "relationships", relId);
     
-    console.log(`[PROCESS] Checking Database Parameters [Stage: ${stage}]...`);
     try {
       const snap = await getDoc(relRef);
       if (snap.exists()) {
         const data = snap.data();
-        console.log(`[DB_STATE] RelID: ${relId}`);
-        console.log(`  - relationshipType: "${data.relationshipType}"`);
-        console.log(`  - historyType: "${data.historyType}"`);
+        console.log(`[DB_STATE] Pair: ${label} (${relId})`);
         console.log(`  - rollingSentimentScore: ${data.rollingSentimentScore?.toFixed(4)} (CLIMATE)`);
-        console.log(`  - interactionCount: ${data.interactionCount}`);
-        console.log(`  - isBursting: ${data.isBursting}`);
-      } else {
-        console.log(`[DB_STATE] No record exists yet.`);
+        console.log(`  - historyType: "${data.historyType}"`);
       }
     } catch (e) {
       console.error(`[DB_ERROR] Failed to fetch state:`, e);
@@ -58,112 +62,79 @@ async function runDriftStressTest() {
   };
 
   /**
-   * Helper to fetch and print the last 10 toxicity scores for this pair.
-   * This shows exactly what the AI audits for NEGATIVE_DRIFT_DETECTED.
+   * Helper to fetch and print the last 10 toxicity scores for a specific pair.
    */
-  const logRecentActivities = async () => {
-    console.log(`[PROCESS] Auditing Last 10 Toxicity Scores for this Pair...`);
+  const logPairActivityAudit = async (sender: string, receiver: string) => {
+    console.log(`[PROCESS] Auditing Pair History: ${sender} -> ${receiver}...`);
     try {
       const activitiesRef = collection(db, 'activities');
       const q = query(
         activitiesRef, 
-        where('userId', '==', senderId),
-        where('receiverId', '==', receiverId),
+        where('userId', '==', sender),
+        where('receiverId', '==', receiver),
         limit(10) 
       );
       const snap = await getDocs(q);
       
-      // Manual sort for logging output
       const docs = snap.docs.sort((a, b) => {
         const dateA = new Date(a.data().date).getTime();
         const dateB = new Date(b.data().date).getTime();
-        return dateB - dateA; // Descending
+        return dateB - dateA;
       });
 
       if (docs.length === 0) {
-        console.log(`  - No activity logs found yet.`);
+        console.log(`  - No activity logs found for this pair.`);
       } else {
         docs.forEach((doc, idx) => {
           const d = doc.data();
-          console.log(`  [${idx + 1}] Toxicity: ${d.toxicityScore?.toFixed(2)} | Text: "${d.originalText?.substring(0, 30)}..." | Date: ${d.date}`);
+          console.log(`  [${idx + 1}] Tox: ${d.toxicityScore?.toFixed(2)} | Text: "${d.originalText?.substring(0, 30)}..."`);
         });
         const highToxicityCount = docs.filter(doc => (doc.data().toxicityScore || 0) > 0.70).length;
-        console.log(`  - High Toxicity Messages (>0.70): ${highToxicityCount}/10 (Alert triggers if count >= 3)`);
+        console.log(`  - High Toxicity Messages: ${highToxicityCount}/10 (Threshold for DRIFT alert is 3)`);
       }
     } catch (e) {
-      console.error(`[PROCESS_ERROR] Failed to fetch activity logs:`, e);
+      console.error(`[PROCESS_ERROR] Failed to fetch audit:`, e);
     }
     console.log("--------------------------------------------------");
   };
 
-  // Attack Messages sequence
-  const attackMessages = [
-    "You're being really annoying.",
-    "I'm tired of your attitude.",
-    "Stop talking to me.",
-    "You are such a loser.",
-    "Seriously, get lost."
-  ];
-
-  console.log("\n[STAGE 1] ATTACK SEQUENCE (DEGRADING CLIMATE)");
-  for (const [idx, msg] of attackMessages.entries()) {
-    console.log(`\n[MSG ${idx + 1}/5] Content: "${msg}"`);
-    console.log(`[PROCESS] Analyzing toxicity and updating rolling sentiment...`);
+  for (const [idx, item] of conversationQueue.entries()) {
+    const label = item.to === userB ? "TOXIC_TARGET_B" : "HEALTHY_TARGET_C";
+    console.log(`\n[MESSAGE ${idx + 1}/${conversationQueue.length}] ${item.from} -> ${item.to} (${label})`);
+    console.log(`Content: "${item.text}"`);
     
-    const result = await externalModerator({
-      messageText: msg,
-      senderId,
-      receiverId,
-      profileId
-    });
+    try {
+      const result = await externalModerator({
+        messageText: item.text,
+        senderId: item.from,
+        receiverId: item.to,
+        profileId
+      });
 
-    console.log(`[RESPONSE] Action: ${result.action.toUpperCase()}`);
-    console.log(`[RESPONSE] Alerts: ${JSON.stringify(result.behavioralAlerts)}`);
-    console.log(`[RESPONSE] Confidence: ${(result.confidenceScore * 100).toFixed(1)}%`);
-    console.log(`[RESPONSE] Calculated Toxicity: ${result.toxicityScore?.toFixed(2)}`);
-    
-    await logRelationshipParams(`After Attack ${idx + 1}`);
-    await logRecentActivities();
-    
-    // Sleep to ensure Firestore consistency
-    await new Promise(r => setTimeout(r, 1500));
-  }
+      console.log(`[FLOW_RESPONSE] Action: ${result.action.toUpperCase()}`);
+      console.log(`[FLOW_RESPONSE] Alerts: ${JSON.stringify(result.behavioralAlerts)}`);
+      
+      if (result.behavioralAlerts.includes("NEGATIVE_DRIFT_DETECTED")) {
+        console.log(`🚨 ALERT: Drift detected for pair ${item.from} -> ${item.to}`);
+      }
 
-  // Pulse Check
-  console.log("\n[STAGE 2] THE PULSE VERIFICATION (THE SMOKING GUN)");
-  const pulseMsg = "Fine, whatever.";
-  console.log(`[PROCESS] Sending NEUTRAL Message: "${pulseMsg}"`);
-  console.log(`[PROCESS] Expecting NEGATIVE_DRIFT_DETECTED due to toxic history.`);
-  
-  try {
-    const finalResult = await externalModerator({
-      messageText: pulseMsg,
-      senderId,
-      receiverId,
-      profileId
-    });
-
-    console.log("\n==================================================");
-    console.log("📊 FINAL FLOW RESPONSE:");
-    console.log(JSON.stringify(finalResult, null, 2));
-    console.log("==================================================");
-
-    await logRelationshipParams("FINAL VERIFICATION");
-    await logRecentActivities();
-
-    if (finalResult.behavioralAlerts.includes("NEGATIVE_DRIFT_DETECTED")) {
-      console.log("\n✅ SUCCESS: Sentiment Drift detected correctly!");
-    } else {
-      console.log("\n❌ FAILURE: Drift alert missing. Check thresholds.");
+      await logRelationshipParams(item.from, item.to, label);
+      await logPairActivityAudit(item.from, item.to);
+      
+      // Wait for Firestore consistency
+      await new Promise(r => setTimeout(r, 1500));
+    } catch (err) {
+      console.error(`[ERROR] Message ${idx + 1} failed:`, err);
     }
-  } catch (err) {
-    console.error(`[PROCESS_ERROR] Pulse check failed:`, err);
   }
-  
+
+  console.log("\n==================================================");
+  console.log("🏁 SIMULATION COMPLETE");
+  console.log("==================================================\n");
   process.exit(0);
 }
 
-runDriftStressTest().catch(err => {
+runCrossPairDriftTest().catch(err => {
   console.error("FATAL ERROR:", err);
   process.exit(1);
 });
