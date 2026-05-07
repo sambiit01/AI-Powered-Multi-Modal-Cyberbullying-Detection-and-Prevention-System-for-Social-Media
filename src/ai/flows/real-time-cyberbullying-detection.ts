@@ -25,7 +25,7 @@ const RealTimeCyberbullyingDetectionOutputSchema = z.object({
   reason: z.string().describe('The reason for the cyberbullying detection.'),
   severity: z.string().optional().describe('Severity level of the cyberbullying.'),
   suggestedAction: z.string().optional().describe('Action suggested for cyberbullying incident.'),
-  confidenceScore: z.number().describe('Toxicity score from 0-1.'),
+  confidenceScore: z.number().describe('Confidence level of the detection.'),
 });
 
 export type RealTimeCyberbullyingDetectionOutput = z.infer<typeof RealTimeCyberbullyingDetectionOutputSchema>;
@@ -67,19 +67,26 @@ const realTimeCyberbullyingDetectionFlow = ai.defineFlow(
     const {output} = await detectCyberbullyingPrompt(input);
     const result = output!;
 
-    // Persist behavior using confidence score
-    await updateRelationshipBehavior(input.senderId, input.receiverId, result.confidenceScore);
+    // Directional Toxicity Calculation
+    const toxicityScore = result.isCyberbullying 
+      ? result.confidenceScore 
+      : Math.max(0.1, 1 - result.confidenceScore);
+
+    // Persist behavior using toxicity score
+    await updateRelationshipBehavior(input.senderId, input.receiverId, toxicityScore);
 
     // Log Activity
     await addDoc(collection(db, 'activities'), {
       type: 'Content',
       userId: input.senderId,
+      receiverId: input.receiverId,
       details: input.content.substring(0, 50),
       status: result.isCyberbullying ? 'Flagged' : 'Safe',
       date: new Date().toISOString(),
       reasoning: result.reason,
       originalText: input.content,
-      confidenceScore: result.confidenceScore
+      confidenceScore: result.confidenceScore,
+      toxicityScore: toxicityScore
     });
 
     return result;
