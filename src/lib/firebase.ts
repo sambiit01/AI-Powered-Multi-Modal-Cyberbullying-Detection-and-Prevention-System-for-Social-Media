@@ -1,15 +1,17 @@
-import * as dotenv from 'dotenv';
-dotenv.config();
-dotenv.config({ path: '.env.local' });
 
-// Import the functions you need from the SDKs you need
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load environment variables for both terminal and web environments
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -19,7 +21,6 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
 let app;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
@@ -27,13 +28,10 @@ if (!getApps().length) {
   app = getApps()[0];
 }
 
-// Safely export auth for terminal environments
+// Lazy auth getter to prevent terminal crashes if keys are missing initially
 export const auth = firebaseConfig.apiKey ? getAuth(app) : (null as any);
 export const db = getFirestore(app);
 
-/**
- * Interface for Admin/Moderation Settings
- */
 export interface AdminSettings {
   profileType: string;
   sensitivityThreshold: number;
@@ -41,18 +39,11 @@ export interface AdminSettings {
   updatedAt: string;
 }
 
-/**
- * Interface for Global App Configuration
- */
 export interface GlobalConfig {
   defaultProfileId: string;
   updatedAt: string;
 }
 
-/**
- * Fetches moderation settings for a specific profile.
- * Defaults to the global default profile if no profileId is provided.
- */
 export async function getProfileSettings(profileId?: string): Promise<AdminSettings> {
   let targetId = profileId;
 
@@ -64,9 +55,7 @@ export async function getProfileSettings(profileId?: string): Promise<AdminSetti
         const config = globalSnap.data() as GlobalConfig;
         targetId = config.defaultProfileId;
       }
-    } catch (e) {
-      // Fallback
-    }
+    } catch (e) {}
   }
 
   targetId = targetId || 'standard';
@@ -95,9 +84,6 @@ export async function getProfileSettings(profileId?: string): Promise<AdminSetti
   }
 }
 
-/**
- * Maps interaction count to relationship level.
- */
 function calculateRelationshipLevel(totalCount: number, isBidirectional: boolean): string {
   const effectiveCount = isBidirectional ? totalCount * 2 : totalCount;
   if (effectiveCount <= 5) return 'Stranger';
@@ -106,28 +92,19 @@ function calculateRelationshipLevel(totalCount: number, isBidirectional: boolean
   return 'Close Friend';
 }
 
-/**
- * Calculates interaction frequency based on timing and volume.
- */
 function calculateInteractionFrequency(count: number, lastInteractionIso: string): string {
   if (count <= 1) return 'One-time';
-  
   const lastDate = new Date(lastInteractionIso).getTime();
   const now = Date.now();
   const diffHours = (now - lastDate) / (1000 * 60 * 60);
-
   if (diffHours < 48 && count > 5) return 'Often';
   return 'Occasional';
 }
 
-/**
- * Calculates if a user is currently bursting (flooding messages).
- */
 function calculateIsBursting(timestamps: { [uid: string]: number[] }, senderId: string, receiverId: string): boolean {
   const now = Date.now();
   const senderTimestamps = timestamps[senderId] || [];
   const receiverTimestamps = timestamps[receiverId] || [];
-  
   if (senderTimestamps.length >= 10) {
     const twoMinutesAgo = now - 120000;
     const tenthMessageTs = senderTimestamps[9] || 0;
@@ -138,26 +115,16 @@ function calculateIsBursting(timestamps: { [uid: string]: number[] }, senderId: 
   return false;
 }
 
-/**
- * Fetches or creates a relationship document between two users.
- */
 export async function getOrCreateRelationship(senderId: string, receiverId: string) {
   const relId = [senderId, receiverId].sort().join('_');
   const relRef = doc(db, "relationships", relId);
-  
   try {
     const relDoc = await getDoc(relRef);
-
     if (relDoc.exists()) {
       const data = relDoc.data();
       const isBursting = calculateIsBursting(data.messageTimestamps || {}, senderId, receiverId);
       const frequency = data.interactionFrequency || calculateInteractionFrequency(data.interactionCount || 0, data.lastInteraction || new Date().toISOString());
-
-      return {
-        ...data,
-        isBursting,
-        interactionFrequency: isBursting ? 'High (Bursting)' : frequency
-      };
+      return { ...data, isBursting, interactionFrequency: isBursting ? 'High (Bursting)' : frequency };
     } else {
       const initialData = {
         interactionCount: 0,
@@ -171,58 +138,39 @@ export async function getOrCreateRelationship(senderId: string, receiverId: stri
         lastInteraction: new Date().toISOString(),
         isBursting: false
       };
-      
       await setDoc(relRef, initialData);
       return { ...initialData, isBursting: false };
     }
   } catch (error: any) {
     if (error.code === 'permission-denied') {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: relRef.path,
-        operation: 'get'
-      }));
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relRef.path, operation: 'get' }));
     }
     throw error;
   }
 }
 
-/**
- * Updates relationship metrics after an interaction using numeric toxicity scores.
- * @param toxicityScore 1.0 (Most Toxic) to 0.0 (Most Friendly)
- */
 export async function updateRelationshipBehavior(senderId: string, receiverId: string, toxicityScore: number) {
   const relId = [senderId, receiverId].sort().join('_');
   const relRef = doc(db, "relationships", relId);
   const now = Date.now();
-
   try {
     const relDoc = await getDoc(relRef);
     if (!relDoc.exists()) return;
-
     const data = relDoc.data();
     const userCounts = data.userCounts || { [senderId]: 0, [receiverId]: 0 };
     userCounts[senderId] = (userCounts[senderId] || 0) + 1;
-
     const totalCount = (data.interactionCount || 0) + 1;
     const isBidirectional = (userCounts[senderId] > 0 && userCounts[receiverId] > 0);
-    
     const timestamps = data.messageTimestamps || { [senderId]: [], [receiverId]: [] };
     timestamps[senderId] = [now, ...(timestamps[senderId] || [])].slice(0, 10);
-
-    let sentiment = data.rollingSentimentScore || 0.5;
     
-    // NEW SENTIMENT LOGIC: Toxicity-based updates
-    if (toxicityScore > 0.7) {
-      sentiment -= 0.15;
-    } else if (toxicityScore < 0.3) {
-      sentiment += 0.05;
-    }
-
-    // Clamp score between 0.0 and 1.0
+    let sentiment = data.rollingSentimentScore || 0.5;
+    if (toxicityScore > 0.7) sentiment -= 0.15;
+    else if (toxicityScore < 0.3) sentiment += 0.05;
     sentiment = Math.max(0.0, Math.min(1.0, sentiment));
 
     const newLevel = calculateRelationshipLevel(totalCount, isBidirectional);
-    const newHistory = sentiment > 0.8 ? 'Friendly' : (sentiment < 0.4 ? 'Hostile' : 'Neutral');
+    const newHistory = sentiment > 0.8 ? 'Friendly' : (sentiment < 0.35 ? 'Hostile' : 'Neutral');
     const newLastInteraction = new Date().toISOString();
     const newFrequency = calculateInteractionFrequency(totalCount, newLastInteraction);
     const isBursting = calculateIsBursting(timestamps, senderId, receiverId);
