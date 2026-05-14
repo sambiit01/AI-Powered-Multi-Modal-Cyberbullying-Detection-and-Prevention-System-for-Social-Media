@@ -16,10 +16,10 @@ import { externalModerator } from './ai/flows/external-api-moderator';
  * 2. Verify that drift logic is 'Pair-Locked' and centralized logs show the process.
  */
 async function runCrossPairDriftTest() {
-  const userA = "MmOCEqXDe6VeaNoM6RAcOSE1Dkz2";
-  const userB = "sambit";
-  const userC = "cpim";
-  const profileId = 'educational'; 
+  const userA = "adi";
+  const userB = "cpim";
+  const userC = "sambit";
+  const profileId = 'professional'; 
 
   const conversationQueue = [
     { from: userA, to: userB, text: "You're honestly so slow at this.", type: "TOXIC" },

@@ -1,12 +1,17 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables immediately
+// Load environment variables immediately to resolve auth errors
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 import { externalModerator } from './ai/flows/external-api-moderator';
 
+/**
+ * SHIELDAI: 10-MESSAGE STRESS TEST (DRIVER)
+ * This script is a clean driver. All internal logging and database
+ * inspection happens within the externalModerator flow.
+ */
 async function runMasterTest() {
   const senderId = `samb`;
   const receiverId = `aap`;
@@ -29,10 +34,9 @@ async function runMasterTest() {
   console.log(`🚀 SHIELDAI 10-MESSAGE STRESS TEST [Profile: ${profileId}]`);
   console.log(`Target: ${senderId} -> ${receiverId}`);
   console.log("==================================================\n");
-  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
   for (let i = 0; i < messages.length; i++) {
-    await delay(10000);
-    console.log(`--- Message ${i + 1}: "${messages[i].text}" ---`);
+    console.log(`[DRIVER] Executing Item ${i + 1}/${messages.length}: "${messages[i].text}"`);
     
     try {
       const result = await externalModerator({
@@ -42,20 +46,16 @@ async function runMasterTest() {
         profileId
       });
 
-      console.log(`Action: ${result.action.toUpperCase()}`);
-      console.log(`Confidence: ${(result.confidenceScore * 100).toFixed(1)}%`);
-      console.log(`Alerts: ${JSON.stringify(result.behavioralAlerts)}`);
-      
-      if (result.behavioralAlerts.includes("NEGATIVE_DRIFT_DETECTED")) {
-        console.log("🚨 ALERT: Negative Drift was detected at message " + (i + 1));
+      console.log(`[DRIVER] AI Decision: ${result.action.toUpperCase()}`);
+      if (result.behavioralAlerts.length > 0) {
+        console.log(`[DRIVER] Alerts Received: ${JSON.stringify(result.behavioralAlerts)}`);
       }
       
-      // Mandatory sleep for Firestore consistency
-      await new Promise(r => setTimeout(r, 1200));
+      // Delay to ensure Firestore write consistency and prevent terminal flooding
+      await new Promise(r => setTimeout(r, 2000));
     } catch (err) {
-      console.error(`❌ Error at message ${i + 1}:`, err);
+      console.error(`[DRIVER_ERROR] Failed at item ${i + 1}:`, err);
     }
-    console.log(`Waiting for 10 seconds`);
   }
 
   console.log("\n==================================================");

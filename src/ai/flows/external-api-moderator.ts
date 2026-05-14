@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Central External API Moderator with Behavioral Process Logging.
@@ -42,6 +41,7 @@ async function analyzeSentimentDrift(senderId: string, receiverId: string): Prom
     );
     const snap = await getDocs(q);
     
+    // Sort in-memory to avoid composite index requirement
     const sortedDocs = snap.docs.sort((a, b) => {
       const dateA = new Date(a.data().date).getTime();
       const dateB = new Date(b.data().date).getTime();
@@ -104,16 +104,17 @@ const externalModeratorFlow = ai.defineFlow(
       banterTolerance: settings.banterTolerance,
     });
 
+    // 3. Directional Toxicity Logic
     const toxicityScore = analysis.isCyberbullying 
       ? analysis.confidenceScore 
       : Math.max(0.1, 1 - analysis.confidenceScore);
     
     console.log(`[AI_RESULT] Flagged: ${analysis.isCyberbullying} | Conf: ${analysis.confidenceScore.toFixed(2)} | Tox: ${toxicityScore.toFixed(2)}`);
 
-    // 3. Climate Update
+    // 4. Climate Update (Numeric)
     await updateRelationshipBehavior(input.senderId, input.receiverId, toxicityScore);
 
-    // 4. Persistence
+    // 5. Persistence
     await addDoc(collection(db, 'activities'), {
       type: 'Content',
       userId: input.senderId,
@@ -129,7 +130,7 @@ const externalModeratorFlow = ai.defineFlow(
       toxicityScore: toxicityScore
     });
 
-    // 5. Behavioral Auditing
+    // 6. Behavioral Auditing (Pair-Locked)
     const alerts: string[] = [];
     if (relData.isBursting) alerts.push('BURST_DETECTED');
     
